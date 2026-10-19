@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "fingrr",
+    "slug": "fingrr",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "fingrr",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.fingrr.app",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.fingrr.app"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-asset",
+      "expo-font"
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+services:
+  relay:
+    build:
+      context: ./server
+      target: prod
+    volumes: []
+    restart: always
