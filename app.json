@@ -44,7 +44,6 @@
         "android.permission.VIBRATE",
         "android.permission.USE_FULL_SCREEN_INTENT"
       ],
-      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro"
@@ -73,8 +72,7 @@
         "expo-build-properties",
         {
           "ios": {
-            "deploymentTarget": "16.4",
-            "extraPodfileHeadContent": "source 'https://github.com/jitsi/jitsi-meet-podspecs.git'\nsource 'https://cdn.cocoapods.org/'"
+            "deploymentTarget": "16.4"
           },
           "android": {
             "compileSdkVersion": 35,
