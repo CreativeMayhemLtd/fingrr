@@ -68,7 +68,6 @@
         }
       ],
       "expo-image-picker",
-      "./plugins/withJitsiPodSource",
       [
         "expo-build-properties",
         {
