@@ -3,19 +3,47 @@
     "name": "fingrr",
     "slug": "fingrr",
     "version": "0.1.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "scheme": "fingrr",
-    "platforms": [
-      "ios",
-      "android",
-      "web"
-    ],
+    "platforms": ["ios", "android", "web"],
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0a"
+    },
     "ios": {
-      "bundleIdentifier": "com.fingrr.app",
-      "supportsTablet": true
+      "bundleIdentifier": "fm.lysn.fingrr",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "fingrr uses the camera for video calls.",
+        "NSMicrophoneUsageDescription": "fingrr uses the microphone for voice and video calls.",
+        "NSPhotoLibraryUsageDescription": "fingrr accesses your photo library to share images.",
+        "UIBackgroundModes": ["voip", "fetch", "remote-notification"]
+      },
+      "entitlements": {
+        "aps-environment": "production"
+      }
     },
     "android": {
-      "package": "com.fingrr.app"
+      "package": "fm.lysn.fingrr",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0a0a"
+      },
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "USE_FULL_SCREEN_INTENT"
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro"
@@ -24,7 +52,33 @@
       "expo-router",
       "expo-secure-store",
       "expo-asset",
-      "expo-font"
-    ]
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#2563eb",
+          "defaultChannel": "messages"
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ],
+      [
+        "react-native-webrtc",
+        {
+          "cameraPermission": "fingrr uses the camera for video calls.",
+          "microphonePermission": "fingrr uses the microphone for voice and video calls."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    }
   }
 }

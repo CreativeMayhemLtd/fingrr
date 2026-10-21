@@ -17,6 +17,7 @@ import type { LysnEnvelope } from '@/crypto/message';
 import { handleIncomingEnvelope } from '@/services/messaging';
 import { useIdentityStore } from '@/store/identity';
 import { useContactsStore } from '@/store/contacts';
+import { pingRelay } from '@/services/notifications';
 
 const PUBLIC_API = 'https://public.api.bsky.app/xrpc';
 
@@ -39,6 +40,8 @@ export async function writeInboxRecord(
       ts: Date.now(),
     },
   });
+  // Silent push so recipient wakes and polls — fire-and-forget
+  pingRelay(recipientSessionId);
 }
 
 // Poll a contact's PDS for inbox records addressed to us (our inboxToken prefix).

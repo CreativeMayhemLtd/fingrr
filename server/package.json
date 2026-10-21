@@ -1,0 +1,14 @@
+{
+  "name": "fingrr-push-relay",
+  "version": "0.1.0",
+  "description": "Relay-lite: holds only Expo push tokens, forwards silent push pings. Zero message content stored.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "expo-server-sdk": "^3.10.0",
+    "fastify": "^4.28.0"
+  }
+}
