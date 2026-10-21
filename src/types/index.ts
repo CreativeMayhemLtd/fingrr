@@ -32,6 +32,24 @@ export interface Message {
   status: 'sending' | 'sent' | 'delivered' | 'failed';
 }
 
+export interface GroupMember {
+  did: string;
+  handle: string;
+  displayName?: string;
+  messagingDid: string;
+  ikPub: Uint8Array;
+  sessionId: string;    // inboxToken from their keybundle
+  addedAt: number;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  adminDid: string;      // ATProto DID of the creator/admin
+  createdAt: number;
+  members: GroupMember[];
+}
+
 export interface FileTransfer {
   id: string;
   name: string;

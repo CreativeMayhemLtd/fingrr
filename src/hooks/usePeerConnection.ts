@@ -11,6 +11,7 @@ import { ATProtoSignaling } from '@/transport/signaling';
 import { PeerConnection } from '@/services/webrtc';
 import { handleIncomingEnvelope } from '@/services/messaging';
 import { pollAllContactInboxes, pruneMyInboxRecords } from '@/services/inbox';
+import { discoverMyGroups } from '@/services/group';
 import { setActivePeer, setActiveSignaling } from '@/services/session';
 import { getDB } from '@/db';
 
@@ -37,9 +38,9 @@ export function usePeerConnection(): void {
     // Watch all contacts we already know
     contacts.forEach(c => signaling.watchContact(c.did));
 
-    // Fetch offline messages left in contacts' inbox collections
+    // Fetch offline messages + re-discover groups from ATProto
     pollAllContactInboxes();
-    // Clean up old inbox records we sent (>7 days)
+    discoverMyGroups();
     pruneMyInboxRecords();
 
     // Handle incoming WebRTC signals

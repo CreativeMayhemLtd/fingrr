@@ -6,6 +6,8 @@ export const STUN_SERVERS: RTCIceServer[] = [
 ];
 
 // ATProto collections
-export const COLLECTION_SIGNAL   = 'fm.lysn.signal';    // WebRTC signaling (short-lived)
-export const COLLECTION_INBOX    = 'fm.lysn.inbox';     // Async offline messages
-export const COLLECTION_KEYBUNDLE = 'fm.lysn.keybundle';
+export const COLLECTION_SIGNAL        = 'fm.lysn.signal';         // WebRTC signaling (short-lived)
+export const COLLECTION_INBOX         = 'fm.lysn.inbox';          // Async offline messages
+export const COLLECTION_KEYBUNDLE     = 'fm.lysn.keybundle';
+export const COLLECTION_GROUP         = 'fm.lysn.group';          // Group metadata (on admin's PDS)
+export const COLLECTION_GROUPMEMBERSHIP = 'fm.lysn.groupmembership'; // Self-published membership index

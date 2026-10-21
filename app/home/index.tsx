@@ -1,15 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  View, Text, SectionList, TouchableOpacity, StyleSheet,
   Animated, ImageBackground, useColorScheme, Platform,
-  Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useContactsStore } from '@/store/contacts';
+import { useGroupsStore } from '@/store/groups';
 import { useIdentityStore } from '@/store/identity';
 import { useUIStore } from '@/store/ui';
 import { router } from 'expo-router';
-import type { Contact } from '@/types';
+import type { Contact, Group } from '@/types';
 
 const FINGER_EMOJIS = ['👈', '👉', '☝️', '🖕', '👇', '👆', '🫵', '👍'];
 
@@ -66,6 +66,7 @@ function PrivateText({ value, style }: { value: string; style?: object }) {
 
 export default function Home() {
   const contacts  = useContactsStore(s => s.contacts);
+  const groups    = useGroupsStore(s => s.groups);
   const identity  = useIdentityStore(s => s.identity);
   const blurred   = useUIStore(s => s.blurred);
   const theme     = useUIStore(s => s.theme);
@@ -139,48 +140,88 @@ export default function Home() {
         </View>
       </View>
 
-      {/* ── Section header ── */}
-      <View style={s.sectionRow}>
-        <Text style={[s.sectionLabel, { color: colors.dim }]}>Messages</Text>
-        <TouchableOpacity style={s.addBtn} onPress={() => router.push('/contacts/add')} activeOpacity={0.8}>
-          <Text style={s.addBtnText}>+ New</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Contact list ── */}
-      <FlatList
-        data={contacts}
-        keyExtractor={(c: Contact) => c.did}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[s.row, { borderBottomColor: colors.rowBorder }]}
-            onPress={() => router.push(`/chat/${item.did}`)}
-            activeOpacity={0.7}
-          >
-            <ContactAvatar label={item.handle || item.did} size={42} color="#1e3a5f" />
-            <View style={s.rowText}>
-              <PrivateText
-                value={item.displayName ?? `@${item.handle.replace(/\.bsky\.social$/, '')}`}
-                style={[s.rowHandle, { color: colors.fg }]}
-              />
-              <PrivateText
-                value={`@${item.handle.replace(/\.bsky\.social$/, '')}`}
-                style={[s.rowSub, { color: colors.dim }]}
-              />
-            </View>
-            <Text style={[s.chevron, { color: colors.dim }]}>›</Text>
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={
-          <View style={s.emptyWrap}>
-            <Text style={s.emptyIcon}>💬</Text>
-            <Text style={[s.emptyTitle, { color: colors.fg }]}>No messages yet</Text>
-            <Text style={[s.emptyBody, { color: colors.dim }]}>
-              Tap <Text style={s.emptyAccent}>+ New</Text> to start an encrypted conversation with someone on Bluesky.
-            </Text>
+      {/* ── Combined SectionList: Groups + Direct Messages ── */}
+      <SectionList
+        sections={[
+          {
+            key: 'groups',
+            title: 'Groups',
+            action: () => router.push('/group/new'),
+            actionLabel: '+ New Group',
+            data: groups,
+          },
+          {
+            key: 'dms',
+            title: 'Messages',
+            action: () => router.push('/contacts/add'),
+            actionLabel: '+ New',
+            data: contacts,
+          },
+        ]}
+        keyExtractor={(item: Group | Contact) => (item as any).id ?? (item as any).did}
+        renderSectionHeader={({ section }) => (
+          <View style={[s.sectionRow, { borderBottomColor: colors.rowBorder }]}>
+            <Text style={[s.sectionLabel, { color: colors.dim }]}>{section.title}</Text>
+            <TouchableOpacity style={s.addBtn} onPress={section.action} activeOpacity={0.8}>
+              <Text style={s.addBtnText}>{section.actionLabel}</Text>
+            </TouchableOpacity>
           </View>
+        )}
+        renderItem={({ item, section }) => {
+          if (section.key === 'groups') {
+            const g = item as Group;
+            const memberNames = g.members.slice(0, 3).map(m => m.displayName ?? m.handle.split('.')[0]).join(', ');
+            return (
+              <TouchableOpacity
+                style={[s.row, { borderBottomColor: colors.rowBorder }]}
+                onPress={() => router.push(`/group/${g.id}`)}
+                activeOpacity={0.7}
+              >
+                <View style={[s.groupAvatar, { backgroundColor: '#1a3a2a' }]}>
+                  <Text style={s.groupAvatarText}>👥</Text>
+                </View>
+                <View style={s.rowText}>
+                  <Text style={[s.rowHandle, { color: colors.fg }]} numberOfLines={1}>{g.name}</Text>
+                  <Text style={[s.rowSub, { color: colors.dim }]} numberOfLines={1}>
+                    {memberNames}{g.members.length > 3 ? ` +${g.members.length - 3}` : ''}
+                  </Text>
+                </View>
+                <Text style={[s.chevron, { color: colors.dim }]}>›</Text>
+              </TouchableOpacity>
+            );
+          }
+          const c = item as Contact;
+          return (
+            <TouchableOpacity
+              style={[s.row, { borderBottomColor: colors.rowBorder }]}
+              onPress={() => router.push(`/chat/${c.did}`)}
+              activeOpacity={0.7}
+            >
+              <ContactAvatar label={c.handle || c.did} size={42} color="#1e3a5f" />
+              <View style={s.rowText}>
+                <PrivateText
+                  value={c.displayName ?? `@${c.handle.replace(/\.bsky\.social$/, '')}`}
+                  style={[s.rowHandle, { color: colors.fg }]}
+                />
+                <PrivateText
+                  value={`@${c.handle.replace(/\.bsky\.social$/, '')}`}
+                  style={[s.rowSub, { color: colors.dim }]}
+                />
+              </View>
+              <Text style={[s.chevron, { color: colors.dim }]}>›</Text>
+            </TouchableOpacity>
+          );
+        }}
+        renderSectionFooter={({ section }) =>
+          section.data.length === 0 ? (
+            <View style={s.sectionEmpty}>
+              {section.key === 'groups'
+                ? <Text style={[s.sectionEmptyText, { color: colors.dim }]}>No groups yet — tap + New Group</Text>
+                : <Text style={[s.sectionEmptyText, { color: colors.dim }]}>No contacts yet — tap + New</Text>}
+            </View>
+          ) : null
         }
-        contentContainerStyle={contacts.length === 0 ? { flex: 1 } : undefined}
+        stickySectionHeadersEnabled={false}
       />
     </View>
   );
@@ -262,6 +303,12 @@ const s = StyleSheet.create({
   rowHandle: { fontSize: 15, fontWeight: '600' },
   rowSub: { fontSize: 12, marginTop: 2 },
   chevron: { fontSize: 22, lineHeight: 24 },
+
+  groupAvatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  groupAvatarText: { fontSize: 20 },
+
+  sectionEmpty: { paddingHorizontal: 20, paddingVertical: 12 },
+  sectionEmptyText: { fontSize: 13, fontStyle: 'italic' },
 
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
   emptyIcon: { fontSize: 40 },

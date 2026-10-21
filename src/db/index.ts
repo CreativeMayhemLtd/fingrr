@@ -50,6 +50,37 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
       session_id     TEXT NOT NULL,
       added_at       INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS groups (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      admin_did  TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS group_members (
+      group_id      TEXT NOT NULL,
+      did           TEXT NOT NULL,
+      handle        TEXT NOT NULL,
+      display_name  TEXT,
+      messaging_did TEXT NOT NULL,
+      ik_pub_hex    TEXT NOT NULL,
+      session_id    TEXT NOT NULL,
+      added_at      INTEGER NOT NULL,
+      PRIMARY KEY (group_id, did)
+    );
+
+    CREATE TABLE IF NOT EXISTS group_messages (
+      id          TEXT PRIMARY KEY,
+      group_id    TEXT NOT NULL,
+      sender_did  TEXT NOT NULL,
+      type        TEXT NOT NULL DEFAULT 'text',
+      plaintext   TEXT,
+      sent_at     INTEGER NOT NULL,
+      received_at INTEGER,
+      status      TEXT NOT NULL DEFAULT 'sent'
+    );
+    CREATE INDEX IF NOT EXISTS idx_gmsg ON group_messages(group_id, sent_at DESC);
   `);
 }
 
@@ -159,5 +190,79 @@ export async function loadContacts(): Promise<{
     ikPubHex: r.ik_pub_hex,
     sessionId: r.session_id,
     addedAt: r.added_at,
+  }));
+}
+
+// ── Groups ────────────────────────────────────────────────────────────────────
+
+export async function saveGroup(g: {
+  id: string; name: string; adminDid: string; createdAt: number;
+  members: Array<{ did: string; handle: string; displayName?: string; messagingDid: string; ikPubHex: string; sessionId: string; addedAt: number }>;
+}): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO groups (id, name, admin_did, created_at) VALUES (?, ?, ?, ?)`,
+    [g.id, g.name, g.adminDid, g.createdAt],
+  );
+  for (const m of g.members) {
+    await db.runAsync(
+      `INSERT OR REPLACE INTO group_members (group_id, did, handle, display_name, messaging_did, ik_pub_hex, session_id, added_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [g.id, m.did, m.handle, m.displayName ?? null, m.messagingDid, m.ikPubHex, m.sessionId, m.addedAt],
+    );
+  }
+}
+
+export async function loadGroups(): Promise<Array<{
+  id: string; name: string; adminDid: string; createdAt: number;
+  members: Array<{ did: string; handle: string; displayName?: string; messagingDid: string; ikPubHex: string; sessionId: string; addedAt: number }>;
+}>> {
+  const db = await getDB();
+  const groups = await db.getAllAsync<{ id: string; name: string; admin_did: string; created_at: number }>(
+    `SELECT * FROM groups ORDER BY created_at ASC`,
+  );
+  const result = [];
+  for (const g of groups) {
+    const members = await db.getAllAsync<{ did: string; handle: string; display_name: string | null; messaging_did: string; ik_pub_hex: string; session_id: string; added_at: number }>(
+      `SELECT * FROM group_members WHERE group_id = ? ORDER BY added_at ASC`, [g.id],
+    );
+    result.push({
+      id: g.id, name: g.name, adminDid: g.admin_did, createdAt: g.created_at,
+      members: members.map(m => ({
+        did: m.did, handle: m.handle, displayName: m.display_name ?? undefined,
+        messagingDid: m.messaging_did, ikPubHex: m.ik_pub_hex,
+        sessionId: m.session_id, addedAt: m.added_at,
+      })),
+    });
+  }
+  return result;
+}
+
+export async function saveGroupMessage(msg: {
+  id: string; groupId: string; senderDid: string; type: string;
+  plaintext?: string; sentAt: number; receivedAt?: number; status: string;
+}): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO group_messages (id, group_id, sender_did, type, plaintext, sent_at, received_at, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [msg.id, msg.groupId, msg.senderDid, msg.type, msg.plaintext ?? null,
+     msg.sentAt, msg.receivedAt ?? null, msg.status],
+  );
+}
+
+export async function loadGroupMessages(groupId: string, limit = 100): Promise<Array<{
+  id: string; senderDid: string; type: string; plaintext?: string;
+  sentAt: number; receivedAt?: number; status: string;
+}>> {
+  const db = await getDB();
+  const rows = await db.getAllAsync<{ id: string; sender_did: string; type: string; plaintext: string | null; sent_at: number; received_at: number | null; status: string }>(
+    `SELECT * FROM group_messages WHERE group_id = ? ORDER BY sent_at DESC LIMIT ?`,
+    [groupId, limit],
+  );
+  return rows.map(r => ({
+    id: r.id, senderDid: r.sender_did, type: r.type,
+    plaintext: r.plaintext ?? undefined, sentAt: r.sent_at,
+    receivedAt: r.received_at ?? undefined, status: r.status,
   }));
 }

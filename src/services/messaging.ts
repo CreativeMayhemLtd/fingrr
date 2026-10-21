@@ -72,6 +72,24 @@ export function handleIncomingEnvelope(
 ): void {
   try {
     const msg = openMessage(env, myIkPriv, myMessagingDid);
+
+    // Check if this is a group message: body is JSON with { g, a, b }
+    if (msg.body.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(msg.body);
+        if (parsed.g && parsed.a && typeof parsed.b === 'string') {
+          const contacts = useContactsStore.getState().contacts;
+          const contact = contacts.find(c => c.messagingDid === msg.from);
+          const senderDid = contact?.did ?? msg.from;
+          import('@/services/group').then(({ handleIncomingGroupMessage }) => {
+            handleIncomingGroupMessage(parsed.g, parsed.a, senderDid, parsed.b, msg.iat);
+          });
+          return;
+        }
+      } catch { /* not JSON — fall through to 1:1 handling */ }
+    }
+
+    // 1:1 message
     const contacts = useContactsStore.getState().contacts;
     const contact = contacts.find(c => c.messagingDid === msg.from);
     const conversationDid = contact?.did ?? msg.from;
