@@ -8,11 +8,7 @@
     },
     "orientation": "portrait",
     "scheme": "fingrr",
-    "platforms": [
-      "ios",
-      "android",
-      "web"
-    ],
+    "platforms": ["ios", "android", "web"],
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
@@ -22,18 +18,15 @@
     "ios": {
       "bundleIdentifier": "fm.lysn.fingrr",
       "supportsTablet": true,
+      "entitlements": {
+        "aps-environment": "production"
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "fingrr uses the camera for video calls.",
         "NSMicrophoneUsageDescription": "fingrr uses the microphone for voice and video calls.",
         "NSPhotoLibraryUsageDescription": "fingrr accesses your photo library to share images.",
-        "UIBackgroundModes": [
-          "voip",
-          "fetch",
-          "remote-notification"
-        ]
-      },
-      "entitlements": {
-        "aps-environment": "production"
+        "UIBackgroundModes": ["voip", "fetch", "remote-notification"],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
