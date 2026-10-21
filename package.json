@@ -19,7 +19,6 @@
   "dependencies": {
     "@atproto/api": "^0.13.0",
     "@atproto/oauth-client-browser": "^0.5.10",
-    "@babel/plugin-transform-class-static-block": "^8.0.5",
     "@expo/metro-runtime": "~4.0.1",
     "@noble/ciphers": "^1.0.0",
     "@noble/curves": "^1.6.0",
