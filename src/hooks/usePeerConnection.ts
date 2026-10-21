@@ -10,6 +10,7 @@ import { useContactsStore } from '@/store/contacts';
 import { ATProtoSignaling } from '@/transport/signaling';
 import { PeerConnection } from '@/services/webrtc';
 import { handleIncomingEnvelope } from '@/services/messaging';
+import { pollAllContactInboxes, pruneMyInboxRecords } from '@/services/inbox';
 import { setActivePeer, setActiveSignaling } from '@/services/session';
 import { getDB } from '@/db';
 
@@ -35,6 +36,11 @@ export function usePeerConnection(): void {
 
     // Watch all contacts we already know
     contacts.forEach(c => signaling.watchContact(c.did));
+
+    // Fetch offline messages left in contacts' inbox collections
+    pollAllContactInboxes();
+    // Clean up old inbox records we sent (>7 days)
+    pruneMyInboxRecords();
 
     // Handle incoming WebRTC signals
     const unsub = signaling.onMessage(async (msg) => {

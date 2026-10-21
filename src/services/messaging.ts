@@ -33,8 +33,9 @@ export async function sendTextMessage(contact: Contact, body: string): Promise<v
   if (peer?.dataChannelOpen()) {
     peer.sendEnvelope(env);
   } else {
-    // Offline path: post to ATProto inbox (Step 5 — async delivery)
-    throw new Error('peer offline — async inbox not yet implemented');
+    // Offline: post to recipient's inbox on our PDS — they poll on reconnect
+    const { writeInboxRecord } = await import('@/services/inbox');
+    await writeInboxRecord(contact.sessionId, env);
   }
 
   const msgId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;

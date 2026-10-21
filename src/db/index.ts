@@ -35,6 +35,12 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_did, sent_at DESC);
 
+    CREATE TABLE IF NOT EXISTS seen_inbox (
+      rkey       TEXT PRIMARY KEY,
+      contact_did TEXT NOT NULL,
+      seen_at    INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS contacts (
       did            TEXT PRIMARY KEY,
       handle         TEXT NOT NULL,
@@ -96,6 +102,29 @@ export async function loadMessages(conversationDid: string, limit = 100): Promis
 export async function updateMessageStatus(id: string, status: string): Promise<void> {
   const db = await getDB();
   await db.runAsync(`UPDATE messages SET status = ? WHERE id = ?`, [status, id]);
+}
+
+// ── Inbox seen tracking ────────────────────────────────────────────────────────
+
+export async function markInboxSeen(rkey: string, contactDid: string): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    `INSERT OR IGNORE INTO seen_inbox (rkey, contact_did, seen_at) VALUES (?, ?, ?)`,
+    [rkey, contactDid, Date.now()],
+  );
+}
+
+export async function isInboxSeen(rkey: string): Promise<boolean> {
+  const db = await getDB();
+  const row = await db.getFirstAsync<{ rkey: string }>(
+    `SELECT rkey FROM seen_inbox WHERE rkey = ?`, [rkey],
+  );
+  return row !== null;
+}
+
+export async function pruneSeenInbox(olderThanMs: number): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(`DELETE FROM seen_inbox WHERE seen_at < ?`, [Date.now() - olderThanMs]);
 }
 
 // ── Contacts ──────────────────────────────────────────────────────────────────

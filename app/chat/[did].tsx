@@ -1,28 +1,77 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
-  StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
+  Linking,
 } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useContactsStore } from '@/store/contacts';
 import { useConversationsStore } from '@/store/conversations';
 import { useIdentityStore } from '@/store/identity';
 import { sendTextMessage } from '@/services/messaging';
+import { sendFile, onFileReceived, registerIncomingFile, handleFileChunk, savedFiles } from '@/services/filetransfer';
+import { getActivePeer } from '@/services/session';
 import type { Message } from '@/types';
 
 export default function Chat() {
   const { did } = useLocalSearchParams<{ did: string }>();
   const contact = useContactsStore(s => s.getContact(did));
   const messages = useConversationsStore(s => s.getMessages(did));
+  const addMessage = useConversationsStore(s => s.addMessage);
   const loadFromDB = useConversationsStore(s => s.loadFromDB);
   const myDid = useIdentityStore(s => s.identity?.did);
+  const identity = useIdentityStore(s => s.identity);
+  const ikPriv = useIdentityStore(s => s.ikPriv);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [, forceRender] = useState(0);
 
   // Load message history from SQLite when screen opens
   useEffect(() => {
     if (did) loadFromDB(did);
   }, [did]);
+
+  // Listen for incoming files
+  useEffect(() => {
+    const unsub = onFileReceived((fileId, uri, name) => {
+      // Add a synthetic file message to the conversation
+      if (!contact) return;
+      addMessage(contact.did, {
+        id: fileId,
+        conversationDid: contact.did,
+        senderDid: contact.did,
+        type: 'file',
+        plaintextCache: `📎 ${name}`,
+        sentAt: Date.now(),
+        receivedAt: Date.now(),
+        status: 'delivered',
+      });
+    });
+    return unsub;
+  }, [contact?.did]);
+
+  // Wire incoming file messages from the active peer
+  useEffect(() => {
+    if (!identity || !ikPriv || !contact) return;
+    const peer = getActivePeer();
+    if (!peer) return;
+    const unsub = peer.onEnvelope((env: any) => {
+      // Check if this is a file-meta or file-chunk message
+      try {
+        const { openMessage } = require('@/crypto/message');
+        const msg = openMessage(env, ikPriv, identity.messagingDid);
+        const parsed = JSON.parse(msg.body);
+        if (parsed.t === 'FM') {
+          registerIncomingFile(parsed);
+        } else if (parsed.t === 'FC') {
+          handleFileChunk(parsed);
+          forceRender(n => n + 1);
+        }
+      } catch { /* not a file message — handled elsewhere */ }
+    });
+    return unsub;
+  }, [identity?.did, contact?.did]);
 
   async function send() {
     if (!text.trim() || !contact) return;
@@ -31,26 +80,54 @@ export default function Chat() {
       await sendTextMessage(contact, text.trim());
       setText('');
     } catch (e: any) {
-      Alert.alert('Send failed', e.message ?? 'Unknown error');
+      alert('Send failed: ' + (e.message ?? 'Unknown error'));
     } finally {
       setSending(false);
     }
   }
+
+  const pickAndSendFile = useCallback(async () => {
+    if (!contact) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      await sendFile(contact, asset.uri, asset.name, asset.mimeType ?? 'application/octet-stream');
+      // Show in our own conversation
+      addMessage(contact.did, {
+        id: `${Date.now()}-file`,
+        conversationDid: contact.did,
+        senderDid: myDid ?? '',
+        type: 'file',
+        plaintextCache: `📎 ${asset.name}`,
+        sentAt: Date.now(),
+        status: 'sent',
+      });
+    } catch (e: any) {
+      alert('File send failed: ' + (e.message ?? 'Unknown error'));
+    }
+  }, [contact]);
 
   function startCall() {
     if (!contact) return;
     router.push(`/call/${contact.did}`);
   }
 
-  function attachFile() {
-    Alert.alert('File transfer', 'File attachment coming soon');
-  }
-
   function renderMessage({ item }: { item: Message }) {
     const mine = item.senderDid === myDid;
+    const isFile = item.type === 'file';
+    const saved = isFile ? savedFiles.get(item.id) : null;
+
     return (
       <View style={[styles.bubble, mine ? styles.mine : styles.theirs]}>
-        <Text style={styles.msgText}>{item.plaintextCache ?? '(encrypted)'}</Text>
+        {isFile && saved ? (
+          <TouchableOpacity onPress={() => Linking.openURL(saved.uri)}>
+            <Text style={[styles.msgText, styles.fileLink]}>{item.plaintextCache}</Text>
+            <Text style={styles.fileSub}>Tap to open</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.msgText}>{item.plaintextCache ?? '(encrypted)'}</Text>
+        )}
         <Text style={styles.timestamp}>
           {new Date(item.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Text>
@@ -86,7 +163,7 @@ export default function Chat() {
       />
 
       <View style={styles.inputRow}>
-        <TouchableOpacity style={styles.attachBtn} onPress={attachFile}>
+        <TouchableOpacity style={styles.attachBtn} onPress={pickAndSendFile}>
           <Text style={styles.attachIcon}>📎</Text>
         </TouchableOpacity>
         <TextInput
@@ -131,6 +208,8 @@ const styles = StyleSheet.create({
   mine: { backgroundColor: '#2563eb', alignSelf: 'flex-end', borderBottomRightRadius: 4 },
   theirs: { backgroundColor: '#1e1e1e', alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
   msgText: { color: '#fff', fontSize: 15 },
+  fileLink: { textDecorationLine: 'underline' },
+  fileSub: { color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2 },
   timestamp: { color: 'rgba(255,255,255,0.4)', fontSize: 10, marginTop: 4, textAlign: 'right' },
   inputRow: {
     flexDirection: 'row', padding: 12, borderTopWidth: 1,
