@@ -1,10 +1,10 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useRelay } from '@/hooks/useRelay';
+import { usePeerConnection } from '@/hooks/usePeerConnection';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 function RootLayoutInner() {
-  useRelay();
+  usePeerConnection();
   return (
     <>
       <StatusBar style="auto" />

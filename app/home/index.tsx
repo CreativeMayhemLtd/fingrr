@@ -1,11 +1,35 @@
-import React from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { useContactsStore } from '@/store/contacts';
 import { useIdentityStore } from '@/store/identity';
 import { router } from 'expo-router';
 import type { Contact } from '@/types';
 
-function Avatar({ label, size = 36, color = '#2563eb' }: { label: string; size?: number; color?: string }) {
+const FINGER_EMOJIS = ['👈', '👉', '☝️', '🖕', '👇', '👆', '🫵', '👍'];
+
+function LogoEmoji() {
+  const [idx, setIdx] = useState(0);
+  const scale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 0.55, duration: 45, useNativeDriver: true }),
+        Animated.spring(scale, { toValue: 1, friction: 4, tension: 160, useNativeDriver: true }),
+      ]).start();
+      setIdx(i => (i + 1) % FINGER_EMOJIS.length);
+    }, 500);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <Animated.Text style={{ fontSize: 26, transform: [{ scale }] }}>
+      {FINGER_EMOJIS[idx]}
+    </Animated.Text>
+  );
+}
+
+function ContactAvatar({ label, size = 42, color = '#1e3a5f' }: { label: string; size?: number; color?: string }) {
   return (
     <View style={[av.circle, { width: size, height: size, borderRadius: size / 2, backgroundColor: color }]}>
       <Text style={[av.letter, { fontSize: size * 0.42 }]}>{label.slice(0, 1).toUpperCase()}</Text>
@@ -28,9 +52,11 @@ export default function Home() {
     <View style={s.container}>
       {/* ── Top bar ── */}
       <View style={s.topBar}>
-        <Text style={s.logo}>fingrr</Text>
+        <View style={s.logoRow}>
+          <LogoEmoji />
+          <Text style={s.logo}>fingrr</Text>
+        </View>
         <TouchableOpacity style={s.userPill} onPress={() => router.push('/debug')} activeOpacity={0.7}>
-          <Avatar label={shortHandle || '?'} size={28} color="#1d4ed8" />
           <Text style={s.handleText} numberOfLines={1}>@{shortHandle || handle}</Text>
         </TouchableOpacity>
       </View>
@@ -49,7 +75,7 @@ export default function Home() {
         keyExtractor={(c: Contact) => c.did}
         renderItem={({ item }) => (
           <TouchableOpacity style={s.row} onPress={() => router.push(`/chat/${item.did}`)} activeOpacity={0.7}>
-            <Avatar label={item.handle || item.did} size={42} color="#1e3a5f" />
+            <ContactAvatar label={item.handle || item.did} size={42} color="#1e3a5f" />
             <View style={s.rowText}>
               <Text style={s.rowHandle}>@{item.handle.replace(/\.bsky\.social$/, '')}</Text>
               <Text style={s.rowSub} numberOfLines={1}>
@@ -80,6 +106,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16,
     borderBottomWidth: 1, borderBottomColor: '#141414',
   },
+  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   logo: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
   userPill: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

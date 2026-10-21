@@ -1,19 +1,25 @@
+// messaging.ts — send/receive text messages over WebRTC data channel.
+//
+// METADATA DESIGN:
+//   Sender identity is encrypted *inside* the Lysn envelope (sealed sender).
+//   The data channel carries opaque ciphertext only — the peer's OS/network
+//   layer sees encrypted bytes addressed to a WebRTC stream, not to a DID.
+//   No message content or sender identity is ever written to a server.
+
 import { sealMessage, openMessage } from '@/crypto/message';
-import { getActiveRelay } from '@/services/session';
+import { getActivePeer } from '@/services/session';
 import { useIdentityStore } from '@/store/identity';
 import { useContactsStore } from '@/store/contacts';
 import { useConversationsStore } from '@/store/conversations';
-import type { Contact, LysnEnvelope } from '@/types';
+import type { Contact } from '@/types';
+import type { LysnEnvelope } from '@/crypto/message';
 
 export async function sendTextMessage(
   contact: Contact,
-  body: string
+  body: string,
 ): Promise<void> {
   const { identity, edPrivateKey } = useIdentityStore.getState();
   if (!identity || !edPrivateKey) throw new Error('not initialized');
-
-  const relay = getActiveRelay();
-  if (!relay) throw new Error('relay not connected');
 
   const iat = Math.floor(Date.now() / 1000);
   const env = sealMessage(
@@ -25,9 +31,14 @@ export async function sendTextMessage(
     iat,
   );
 
-  // Route to contact's inboxToken — stored when the contact was added.
-  // Never re-derive from public identity data.
-  relay.sendEnvelope(env, contact.sessionId);
+  const peer = getActivePeer();
+  if (peer?.dataChannelOpen()) {
+    // Live: send over encrypted P2P data channel
+    peer.sendEnvelope(env);
+  } else {
+    // Offline: post to ATProto inbox — implemented in step 5
+    throw new Error('peer offline — async inbox not yet implemented');
+  }
 
   useConversationsStore.getState().addMessage(contact.did, {
     id: `${Date.now()}-${Math.random()}`,
