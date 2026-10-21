@@ -43,7 +43,7 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
         "android.permission.USE_FULL_SCREEN_INTENT"
-      ],
+      ]
     },
     "web": {
       "bundler": "metro"
