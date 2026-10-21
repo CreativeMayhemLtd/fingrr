@@ -103,8 +103,9 @@ async function setupFromSession(session: OAuthSession, agent: Agent) {
     return null;
   });
   const handle = profile?.data?.handle ?? atprotoDid;
+  const displayName = profile?.data?.displayName ?? null;
 
-  return { atprotoDid, handle, messagingDid, ikPub, spkPub, masterKey, edPriv, ikPriv, spkPriv, inboxToken };
+  return { atprotoDid, handle, displayName, messagingDid, ikPub, spkPub, masterKey, edPriv, ikPriv, spkPriv, inboxToken };
 }
 
 export default function Index() {
@@ -194,8 +195,8 @@ export default function Index() {
 
         if (cancelled) return;
         setIdentity(
-          { did: data.atprotoDid, handle: data.handle, messagingDid: data.messagingDid, ikPub: data.ikPub, spkPub: data.spkPub },
-          data.masterKey, data.edPriv, data.ikPriv, data.spkPriv, data.inboxToken
+          { did: data.atprotoDid, handle: data.handle, displayName: data.displayName, messagingDid: data.messagingDid, ikPub: data.ikPub, spkPub: data.spkPub },
+          data.masterKey, data.edPriv, data.ikPriv, data.spkPriv, data.inboxToken, data.displayName
         );
         devLog.ok('index', `identity set for ${data.handle} → /home`);
         router.replace('/home');

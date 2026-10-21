@@ -4,6 +4,7 @@ export type { LysnEnvelope, LysnMessage };
 export interface FingrIdentity {
   did: string;           // ATProto DID (did:plc:...)
   handle: string;
+  displayName: string | null;
   messagingDid: string;  // did:key:z... (Ed25519)
   ikPub: Uint8Array;     // X25519 identity key pub (32 bytes)
   spkPub: Uint8Array;    // X25519 signed prekey pub (32 bytes)

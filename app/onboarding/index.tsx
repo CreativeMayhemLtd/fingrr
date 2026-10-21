@@ -69,9 +69,11 @@ export default function Onboarding() {
       });
       devLog.ok('onboarding', 'keybundle published');
 
+      const profile = await agent.getProfile({ actor: atprotoDid }).catch(() => null);
+      const displayName = profile?.data?.displayName ?? null;
       setIdentity(
-        { did: atprotoDid, handle: agent.session!.handle ?? h, messagingDid, ikPub, spkPub },
-        masterKey, edPriv, ikPriv, spkPriv, inboxToken
+        { did: atprotoDid, handle: agent.session!.handle ?? h, displayName, messagingDid, ikPub, spkPub },
+        masterKey, edPriv, ikPriv, spkPriv, inboxToken, displayName
       );
       router.replace('/home');
     } catch (e: any) {
