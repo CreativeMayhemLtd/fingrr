@@ -67,7 +67,6 @@
     "wait-on": "^9.5.1"
   },
   "overrides": {
-    "@xmldom/xmldom": ">=0.9.4",
     "@babel/runtime": ">=7.26.10",
     "postcss": ">=8.5.23",
     "query-string": "^7.1.3"
