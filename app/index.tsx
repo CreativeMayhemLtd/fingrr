@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Agent } from '@atproto/api';
+import { setAgent } from '@/services/agent';
 import type { OAuthSession } from '@atproto/oauth-client-browser';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { getMasterKey, deriveEd25519Keypair, deriveX25519Keypair, didKeyFromEd25519 } from '@/crypto/keys';
@@ -191,6 +192,7 @@ export default function Index() {
 
         setStatus('Setting up keys…');
         const agent = new Agent(session);
+        setAgent(agent);
         const data = await setupFromSession(session, agent);
 
         if (cancelled) return;

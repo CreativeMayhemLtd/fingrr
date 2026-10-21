@@ -8,6 +8,7 @@ import { publishKeybundle } from '@/identity/atproto';
 import { useIdentityStore } from '@/store/identity';
 import { router } from 'expo-router';
 import { devLog } from '@/debug/log';
+import { setAgent } from '@/services/agent';
 
 export default function Onboarding() {
   const [handle, setHandle] = useState('');
@@ -49,6 +50,7 @@ export default function Onboarding() {
     try {
       const agent = new BskyAgent({ service: 'https://bsky.social' });
       await agent.login({ identifier: h, password });
+      setAgent(agent as any);
       const atprotoDid = agent.session!.did;
       devLog.info('onboarding', `logged in as ${atprotoDid}`);
 

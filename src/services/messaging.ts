@@ -11,13 +11,11 @@ import { getActivePeer } from '@/services/session';
 import { useIdentityStore } from '@/store/identity';
 import { useContactsStore } from '@/store/contacts';
 import { useConversationsStore } from '@/store/conversations';
+import { saveMessage } from '@/db';
 import type { Contact } from '@/types';
 import type { LysnEnvelope } from '@/crypto/message';
 
-export async function sendTextMessage(
-  contact: Contact,
-  body: string,
-): Promise<void> {
+export async function sendTextMessage(contact: Contact, body: string): Promise<void> {
   const { identity, edPrivateKey } = useIdentityStore.getState();
   if (!identity || !edPrivateKey) throw new Error('not initialized');
 
@@ -33,23 +31,36 @@ export async function sendTextMessage(
 
   const peer = getActivePeer();
   if (peer?.dataChannelOpen()) {
-    // Live: send over encrypted P2P data channel
     peer.sendEnvelope(env);
   } else {
-    // Offline: post to ATProto inbox — implemented in step 5
+    // Offline path: post to ATProto inbox (Step 5 — async delivery)
     throw new Error('peer offline — async inbox not yet implemented');
   }
 
-  useConversationsStore.getState().addMessage(contact.did, {
-    id: `${Date.now()}-${Math.random()}`,
+  const msgId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const msgRecord = {
+    id: msgId,
     conversationDid: contact.did,
     senderDid: identity.did,
-    type: 'text',
+    type: 'text' as const,
     envelope: env,
     plaintextCache: body,
     sentAt: iat * 1000,
+    status: 'sent' as const,
+  };
+
+  useConversationsStore.getState().addMessage(contact.did, msgRecord);
+
+  // Persist to SQLite (non-blocking)
+  saveMessage({
+    id: msgId,
+    conversationDid: contact.did,
+    senderDid: identity.did,
+    type: 'text',
+    plaintext: body,
+    sentAt: iat * 1000,
     status: 'sent',
-  });
+  }).catch(e => console.warn('[db] saveMessage failed:', e));
 }
 
 export function handleIncomingEnvelope(
@@ -63,17 +74,31 @@ export function handleIncomingEnvelope(
     const contacts = useContactsStore.getState().contacts;
     const contact = contacts.find(c => c.messagingDid === msg.from);
     const conversationDid = contact?.did ?? msg.from;
+    const msgId = `${msg.iat}-${Math.random().toString(36).slice(2)}`;
 
-    useConversationsStore.getState().addMessage(conversationDid, {
-      id: `${Date.now()}-${Math.random()}`,
+    const msgRecord = {
+      id: msgId,
       conversationDid,
       senderDid: contact?.did ?? msg.from,
-      type: 'text',
+      type: 'text' as const,
       plaintextCache: msg.body,
       sentAt: msg.iat * 1000,
       receivedAt: Date.now(),
+      status: 'delivered' as const,
+    };
+
+    useConversationsStore.getState().addMessage(conversationDid, msgRecord);
+
+    saveMessage({
+      id: msgId,
+      conversationDid,
+      senderDid: contact?.did ?? msg.from,
+      type: 'text',
+      plaintext: msg.body,
+      sentAt: msg.iat * 1000,
+      receivedAt: Date.now(),
       status: 'delivered',
-    });
+    }).catch(e => console.warn('[db] saveMessage failed:', e));
   } catch {
     // Decryption failed or not addressed to us — drop silently
   }

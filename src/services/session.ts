@@ -1,5 +1,4 @@
-// session.ts — addressing utilities only.
-// The relay layer has been removed. Transport is WebRTC P2P + ATProto signaling.
+// session.ts — addressing utilities + app-level singleton refs.
 //
 // METADATA MODEL:
 //   - inboxToken: 16 random bytes generated fresh each app start.
@@ -16,17 +15,19 @@ import { bytesToHex } from '@noble/hashes/utils';
 
 // Legacy fallback: derive a stable addressing token from a DID.
 // Used only for contacts whose keybundles predate inboxToken (v1 bundles).
-// New contacts always supply their own random inboxToken.
 export function relaySessionId(messagingDid: string): string {
   const h = sha256(new TextEncoder().encode(messagingDid + 'fingrr-relay-v1'));
   return bytesToHex(h.slice(0, 16));
 }
 
-// Active WebRTC peer — module-level so non-React code can reach it
-// without a circular import. Set by usePeerConnection hook.
-// Typed loosely to avoid circular import (webrtc.ts → session.ts → webrtc.ts).
-// Callers that need the full type import directly from @/services/webrtc.
+// Typed loosely to avoid circular imports. Callers that need the full type
+// import directly from @/services/webrtc or @/transport/signaling.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _activePeer: any | null = null;
 export function getActivePeer(): any | null { return _activePeer; }
 export function setActivePeer(p: any | null): void { _activePeer = p; }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _activeSignaling: any | null = null;
+export function getActiveSignaling(): any | null { return _activeSignaling; }
+export function setActiveSignaling(s: any | null): void { _activeSignaling = s; }

@@ -1,100 +1,173 @@
-// webrtc.ts — P2P peer connection over WebRTC.
+// src/services/webrtc.ts — Unified WebRTC peer connection.
 //
-// METADATA MODEL:
-//   - STUN only (no TURN). STUN servers see your IP for NAT traversal but
-//     carry zero message content and zero identity data.
-//   - Once connected, all traffic is direct device-to-device. The STUN server
-//     is no longer in the path.
-//   - Signaling (SDP offer/answer + ICE candidates) goes via ATProto records,
-//     implemented in src/services/signal.ts (step 3).
-//   - The data channel carries raw Lysn envelope bytes — ciphertext only.
-//     Even if the OS network layer were intercepted, an observer sees only
-//     opaque encrypted blobs with no DID, no timestamp metadata beyond
-//     packet timing, no content.
+// Handles text data channel + audio/video media tracks.
+// ICE candidates route through ATProtoSignaling.
+// Works on web (browser WebRTC) and native (react-native-webrtc).
 //
-// Step 2 stub — PeerConnection class wired up, WebRTC calls implemented in
-// the next step once react-native-webrtc integration is verified.
+// METADATA:
+//   STUN only — server sees IPs for NAT traversal, zero message content.
+//   Once connected, all traffic is direct P2P (STUN drops out).
+//   Data channel carries Lysn-sealed envelopes (ciphertext only).
 
+import {
+  RTCPeerConnection,
+  RTCIceCandidate,
+  RTCSessionDescription,
+} from 'react-native-webrtc';
 import { STUN_SERVERS } from '@/config';
+import type { ATProtoSignaling } from '@/transport/signaling';
 import type { LysnEnvelope } from '@/crypto/message';
 
 type EnvelopeHandler = (env: LysnEnvelope) => void;
+type StreamHandler = (stream: unknown) => void;
 
 export class PeerConnection {
-  private pc: RTCPeerConnection | null = null;
-  private dc: RTCDataChannel | null = null;
-  private handlers = new Set<EnvelopeHandler>();
+  private pc: InstanceType<typeof RTCPeerConnection>;
+  private dc: unknown = null;
+  private envelopeHandlers = new Set<EnvelopeHandler>();
+  private streamHandlers = new Set<StreamHandler>();
+  private signaling: ATProtoSignaling | null = null;
+  private myToken = '';
+  private theirToken = '';
+  private unsubs: Array<() => void> = [];
 
-  init(): void {
-    this.pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
-    this.dc = this.pc.createDataChannel('lysn', { ordered: true });
-    this._wireDataChannel(this.dc);
-
-    this.pc.ondatachannel = (ev) => {
-      this.dc = ev.channel;
-      this._wireDataChannel(this.dc);
+  constructor() {
+    this.pc = new RTCPeerConnection({ iceServers: STUN_SERVERS } as any);
+    (this.pc as any).ondatachannel = (ev: any) => {
+      this._wireDataChannel(ev.channel);
+    };
+    (this.pc as any).ontrack = (ev: any) => {
+      if (ev.streams?.[0]) this.streamHandlers.forEach(h => h(ev.streams[0]));
     };
   }
 
-  private _wireDataChannel(dc: RTCDataChannel): void {
-    dc.onmessage = (ev) => {
+  // Call before creating or accepting an offer.
+  attachSignaling(
+    sig: ATProtoSignaling,
+    myToken: string,
+    theirToken: string,
+  ): void {
+    this.signaling = sig;
+    this.myToken = myToken;
+    this.theirToken = theirToken;
+
+    (this.pc as any).onicecandidate = ({ candidate }: any) => {
+      if (candidate) {
+        sig.send({
+          type: 'ice',
+          from: myToken,
+          to: theirToken,
+          payload: btoa(JSON.stringify(candidate)),
+        }).catch(() => {/* fire-and-forget */});
+      }
+    };
+
+    const unsub = sig.onMessage(async (msg) => {
+      if (msg.from !== theirToken) return;
       try {
-        const env: LysnEnvelope = JSON.parse(
-          typeof ev.data === 'string' ? ev.data : new TextDecoder().decode(ev.data)
-        );
-        this.handlers.forEach(h => h(env));
-      } catch { /* malformed — drop */ }
-    };
+        const data = JSON.parse(atob(msg.payload));
+        if (msg.type === 'answer') {
+          await this.pc.setRemoteDescription(new RTCSessionDescription(data) as any);
+        } else if (msg.type === 'ice') {
+          await this.pc.addIceCandidate(new RTCIceCandidate(data) as any);
+        }
+      } catch { /* ignore */ }
+    });
+    this.unsubs.push(unsub);
   }
+
+  // ── Caller side ──────────────────────────────────────────────────────────────
+
+  async initiateCall(hasVideo = false): Promise<void> {
+    // Data channel for text
+    const dc = (this.pc as any).createDataChannel('lysn', { ordered: true });
+    this._wireDataChannel(dc);
+
+    // Media if requested
+    if (hasVideo || true /* always request audio at minimum */) {
+      try {
+        const { mediaDevices } = await import('react-native-webrtc');
+        const stream = await (mediaDevices as any).getUserMedia({ audio: true, video: hasVideo });
+        (stream as any).getTracks().forEach((t: any) => (this.pc as any).addTrack(t, stream));
+        this.streamHandlers.forEach(h => h(stream));
+      } catch { /* no media available */ }
+    }
+
+    const offer = await (this.pc as any).createOffer({});
+    await this.pc.setLocalDescription(offer as any);
+    await this.signaling!.send({
+      type: 'offer',
+      from: this.myToken,
+      to: this.theirToken,
+      payload: btoa(JSON.stringify(offer)),
+    });
+  }
+
+  // ── Callee side ──────────────────────────────────────────────────────────────
+
+  async acceptIncomingOffer(encodedOffer: string, hasVideo = false): Promise<void> {
+    const offer = JSON.parse(atob(encodedOffer));
+    await this.pc.setRemoteDescription(new RTCSessionDescription(offer) as any);
+
+    // Media if requested
+    if (hasVideo || true) {
+      try {
+        const { mediaDevices } = await import('react-native-webrtc');
+        const stream = await (mediaDevices as any).getUserMedia({ audio: true, video: hasVideo });
+        (stream as any).getTracks().forEach((t: any) => (this.pc as any).addTrack(t, stream));
+        this.streamHandlers.forEach(h => h(stream));
+      } catch { /* no media available */ }
+    }
+
+    const answer = await (this.pc as any).createAnswer();
+    await this.pc.setLocalDescription(answer as any);
+    await this.signaling!.send({
+      type: 'answer',
+      from: this.myToken,
+      to: this.theirToken,
+      payload: btoa(JSON.stringify(answer)),
+    });
+  }
+
+  // ── Messaging ────────────────────────────────────────────────────────────────
 
   dataChannelOpen(): boolean {
-    return this.dc?.readyState === 'open';
+    return (this.dc as any)?.readyState === 'open';
   }
 
   sendEnvelope(env: LysnEnvelope): void {
     if (!this.dataChannelOpen()) throw new Error('data channel not open');
-    this.dc!.send(JSON.stringify(env));
+    (this.dc as any).send(JSON.stringify(env));
   }
 
   onEnvelope(handler: EnvelopeHandler): () => void {
-    this.handlers.add(handler);
-    return () => this.handlers.delete(handler);
+    this.envelopeHandlers.add(handler);
+    return () => this.envelopeHandlers.delete(handler);
   }
 
-  async createOffer(): Promise<RTCSessionDescriptionInit> {
-    if (!this.pc) this.init();
-    const offer = await this.pc!.createOffer();
-    await this.pc!.setLocalDescription(offer);
-    return offer;
+  onStream(handler: StreamHandler): () => void {
+    this.streamHandlers.add(handler);
+    return () => this.streamHandlers.delete(handler);
   }
 
-  async acceptOffer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
-    if (!this.pc) this.init();
-    await this.pc!.setRemoteDescription(offer);
-    const answer = await this.pc!.createAnswer();
-    await this.pc!.setLocalDescription(answer);
-    return answer;
-  }
-
-  async acceptAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
-    await this.pc!.setRemoteDescription(answer);
-  }
-
-  async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
-    await this.pc!.addIceCandidate(candidate);
-  }
-
-  onIceCandidate(cb: (c: RTCIceCandidateInit) => void): void {
-    if (!this.pc) return;
-    this.pc.onicecandidate = (ev) => {
-      if (ev.candidate) cb(ev.candidate.toJSON());
-    };
-  }
+  // ── Cleanup ──────────────────────────────────────────────────────────────────
 
   close(): void {
-    this.dc?.close();
-    this.pc?.close();
-    this.dc = null;
-    this.pc = null;
+    this.unsubs.forEach(u => u());
+    this.unsubs = [];
+    (this.dc as any)?.close();
+    this.pc.close();
+  }
+
+  private _wireDataChannel(dc: unknown): void {
+    this.dc = dc;
+    (dc as any).onmessage = (ev: any) => {
+      try {
+        const env: LysnEnvelope = JSON.parse(
+          typeof ev.data === 'string' ? ev.data : new TextDecoder().decode(ev.data),
+        );
+        this.envelopeHandlers.forEach(h => h(env));
+      } catch { /* malformed — drop */ }
+    };
   }
 }

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
-  StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
+  StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useContactsStore } from '@/store/contacts';
@@ -14,13 +14,15 @@ export default function Chat() {
   const { did } = useLocalSearchParams<{ did: string }>();
   const contact = useContactsStore(s => s.getContact(did));
   const messages = useConversationsStore(s => s.getMessages(did));
+  const loadFromDB = useConversationsStore(s => s.loadFromDB);
   const myDid = useIdentityStore(s => s.identity?.did);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
 
-  // Relay is owned by _layout.tsx (via useRelay) and lives for the full app
-  // session. The chat screen reads incoming messages from the conversations
-  // store, which handleIncomingEnvelope populates as envelopes arrive.
+  // Load message history from SQLite when screen opens
+  useEffect(() => {
+    if (did) loadFromDB(did);
+  }, [did]);
 
   async function send() {
     if (!text.trim() || !contact) return;
@@ -29,10 +31,19 @@ export default function Chat() {
       await sendTextMessage(contact, text.trim());
       setText('');
     } catch (e: any) {
-      console.error('send failed:', e.message);
+      Alert.alert('Send failed', e.message ?? 'Unknown error');
     } finally {
       setSending(false);
     }
+  }
+
+  function startCall() {
+    if (!contact) return;
+    router.push(`/call/${contact.did}`);
+  }
+
+  function attachFile() {
+    Alert.alert('File transfer', 'File attachment coming soon');
   }
 
   function renderMessage({ item }: { item: Message }) {
@@ -47,6 +58,8 @@ export default function Chat() {
     );
   }
 
+  const name = contact?.displayName ?? contact?.handle ?? did;
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -56,9 +69,14 @@ export default function Chat() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerName}>{contact?.handle ?? did}</Text>
-        <View style={styles.dot} />
+        <Text style={styles.headerName} numberOfLines={1}>{name}</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.headerBtn} onPress={startCall}>
+            <Text style={styles.headerBtnText}>📞</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
       <FlatList
         data={[...messages].reverse()}
         keyExtractor={m => m.id}
@@ -66,7 +84,11 @@ export default function Chat() {
         contentContainerStyle={styles.messageList}
         inverted
       />
+
       <View style={styles.inputRow}>
+        <TouchableOpacity style={styles.attachBtn} onPress={attachFile}>
+          <Text style={styles.attachIcon}>📎</Text>
+        </TouchableOpacity>
         <TextInput
           style={styles.input}
           placeholder="Message…"
@@ -98,7 +120,12 @@ const styles = StyleSheet.create({
   },
   back: { color: '#2563eb', fontSize: 22, marginRight: 12 },
   headerName: { flex: 1, color: '#fff', fontSize: 17, fontWeight: '600' },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e' },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  headerBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center',
+  },
+  headerBtnText: { fontSize: 18 },
   messageList: { padding: 16, paddingBottom: 8 },
   bubble: { maxWidth: '80%', padding: 10, borderRadius: 16, marginBottom: 8 },
   mine: { backgroundColor: '#2563eb', alignSelf: 'flex-end', borderBottomRightRadius: 4 },
@@ -109,6 +136,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row', padding: 12, borderTopWidth: 1,
     borderTopColor: '#1a1a1a', alignItems: 'flex-end',
   },
+  attachBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center', marginRight: 4,
+  },
+  attachIcon: { fontSize: 22 },
   input: {
     flex: 1, backgroundColor: '#1e1e1e', color: '#fff', padding: 10,
     borderRadius: 20, maxHeight: 100, marginRight: 8, fontSize: 15,
