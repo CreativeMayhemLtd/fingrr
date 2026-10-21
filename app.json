@@ -8,7 +8,11 @@
     },
     "orientation": "portrait",
     "scheme": "fingrr",
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
@@ -22,7 +26,11 @@
         "NSCameraUsageDescription": "fingrr uses the camera for video calls.",
         "NSMicrophoneUsageDescription": "fingrr uses the microphone for voice and video calls.",
         "NSPhotoLibraryUsageDescription": "fingrr accesses your photo library to share images.",
-        "UIBackgroundModes": ["voip", "fetch", "remote-notification"]
+        "UIBackgroundModes": [
+          "voip",
+          "fetch",
+          "remote-notification"
+        ]
       },
       "entitlements": {
         "aps-environment": "production"
@@ -35,13 +43,13 @@
         "backgroundColor": "#0a0a0a"
       },
       "permissions": [
-        "CAMERA",
-        "RECORD_AUDIO",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE",
-        "USE_FULL_SCREEN_INTENT"
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.USE_FULL_SCREEN_INTENT"
       ],
       "googleServicesFile": "./google-services.json"
     },
@@ -67,18 +75,16 @@
           "iCloudContainerEnvironment": "Production"
         }
       ],
-      [
-        "react-native-webrtc",
-        {
-          "cameraPermission": "fingrr uses the camera for video calls.",
-          "microphonePermission": "fingrr uses the microphone for voice and video calls."
-        }
-      ]
+      "expo-image-picker"
     ],
     "extra": {
+      "router": {
+        "origin": false
+      },
       "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+        "projectId": "4d10b19d-073d-4cef-81cb-2c224e1418d4"
       }
-    }
+    },
+    "owner": "neitzert"
   }
 }
