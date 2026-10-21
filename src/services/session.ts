@@ -1,5 +1,5 @@
 import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex } from '@noble/hashes/utils';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { RELAY_WS } from '@/config';
 import type { LysnEnvelope } from '@/crypto/message';
 
@@ -10,14 +10,22 @@ export function relaySessionId(messagingDid: string): string {
 
 type EnvelopeHandler = (env: LysnEnvelope) => void;
 
+// Module-level reference so non-React code (messaging service) can reach the
+// active relay without a circular hook import.
+let _activeRelay: RelaySession | null = null;
+export function getActiveRelay(): RelaySession | null { return _activeRelay; }
+export function setActiveRelay(r: RelaySession | null): void { _activeRelay = r; }
+
 export class RelaySession {
   private ws: WebSocket | null = null;
   private handlers = new Set<EnvelopeHandler>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   readonly sessionId: string;
 
-  constructor(messagingDid: string) {
-    this.sessionId = relaySessionId(messagingDid);
+  // sessionId is the relay inbox address (inboxToken, NOT derived from DID).
+  // Callers pass an explicit ID so the constructor never touches identity data.
+  constructor(sessionId: string) {
+    this.sessionId = sessionId;
   }
 
   connect(): void {
@@ -48,9 +56,13 @@ export class RelaySession {
 
   sendEnvelope(env: LysnEnvelope, toSessionId: string): void {
     if (this.ws?.readyState !== WebSocket.OPEN) return;
+    // Use a fresh random sender ID per message.
+    // The relay routes by `to` only and never uses `from` for routing.
+    // This prevents the relay from building a social graph via stable from-IDs.
+    const ephemeralFrom = bytesToHex(randomBytes(8));
     this.ws.send(JSON.stringify({
       type: 'msg',
-      from: this.sessionId,
+      from: ephemeralFrom,
       to: toSessionId,
       payload: btoa(JSON.stringify(env)),
     }));

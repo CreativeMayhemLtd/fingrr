@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -7,7 +7,6 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useContactsStore } from '@/store/contacts';
 import { useConversationsStore } from '@/store/conversations';
 import { useIdentityStore } from '@/store/identity';
-import { RelaySession } from '@/services/session';
 import { sendTextMessage } from '@/services/messaging';
 import type { Message } from '@/types';
 
@@ -16,23 +15,18 @@ export default function Chat() {
   const contact = useContactsStore(s => s.getContact(did));
   const messages = useConversationsStore(s => s.getMessages(did));
   const myDid = useIdentityStore(s => s.identity?.did);
-  const identity = useIdentityStore(s => s.identity);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const relayRef = useRef<RelaySession | null>(null);
 
-  useEffect(() => {
-    if (!identity) return;
-    relayRef.current = new RelaySession(identity.messagingDid);
-    relayRef.current.connect();
-    return () => { relayRef.current?.disconnect(); };
-  }, [identity?.messagingDid]);
+  // Relay is owned by _layout.tsx (via useRelay) and lives for the full app
+  // session. The chat screen reads incoming messages from the conversations
+  // store, which handleIncomingEnvelope populates as envelopes arrive.
 
   async function send() {
-    if (!text.trim() || !contact || !relayRef.current) return;
+    if (!text.trim() || !contact) return;
     setSending(true);
     try {
-      await sendTextMessage(relayRef.current, contact, text.trim());
+      await sendTextMessage(contact, text.trim());
       setText('');
     } catch (e: any) {
       console.error('send failed:', e.message);

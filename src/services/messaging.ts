@@ -1,18 +1,19 @@
 import { sealMessage, openMessage } from '@/crypto/message';
-import { relaySessionId } from './session';
+import { getActiveRelay } from '@/services/session';
 import { useIdentityStore } from '@/store/identity';
 import { useContactsStore } from '@/store/contacts';
 import { useConversationsStore } from '@/store/conversations';
-import type { RelaySession } from './session';
 import type { Contact, LysnEnvelope } from '@/types';
 
 export async function sendTextMessage(
-  relay: RelaySession,
   contact: Contact,
   body: string
 ): Promise<void> {
   const { identity, edPrivateKey } = useIdentityStore.getState();
   if (!identity || !edPrivateKey) throw new Error('not initialized');
+
+  const relay = getActiveRelay();
+  if (!relay) throw new Error('relay not connected');
 
   const iat = Math.floor(Date.now() / 1000);
   const env = sealMessage(
@@ -21,10 +22,12 @@ export async function sendTextMessage(
     contact.messagingDid,
     contact.ikPub,
     body,
-    iat
+    iat,
   );
 
-  relay.sendEnvelope(env, relaySessionId(contact.messagingDid));
+  // Route to contact's inboxToken — stored when the contact was added.
+  // Never re-derive from public identity data.
+  relay.sendEnvelope(env, contact.sessionId);
 
   useConversationsStore.getState().addMessage(contact.did, {
     id: `${Date.now()}-${Math.random()}`,
@@ -42,7 +45,7 @@ export function handleIncomingEnvelope(
   env: LysnEnvelope,
   myDid: string,
   myMessagingDid: string,
-  myIkPriv: Uint8Array
+  myIkPriv: Uint8Array,
 ): void {
   try {
     const msg = openMessage(env, myIkPriv, myMessagingDid);
@@ -61,6 +64,6 @@ export function handleIncomingEnvelope(
       status: 'delivered',
     });
   } catch {
-    // decryption failed or not addressed to us — drop silently
+    // Decryption failed or not addressed to us — drop silently
   }
 }

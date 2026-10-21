@@ -1,18 +1,22 @@
 import { useEffect, useRef } from 'react';
-import { RelaySession } from '@/services/session';
+import { RelaySession, setActiveRelay } from '@/services/session';
 import { handleIncomingEnvelope } from '@/services/messaging';
 import { useIdentityStore } from '@/store/identity';
 
 export function useRelay(): RelaySession | null {
   const identity = useIdentityStore(s => s.identity);
   const ikPriv = useIdentityStore(s => s.ikPriv);
+  const inboxToken = useIdentityStore(s => s.inboxToken);
   const relayRef = useRef<RelaySession | null>(null);
 
   useEffect(() => {
-    if (!identity || !ikPriv) return;
+    if (!identity || !ikPriv || !inboxToken) return;
 
-    const relay = new RelaySession(identity.messagingDid);
+    // Connect under our inboxToken — a random per-session value, not derived
+    // from any public identity data.
+    const relay = new RelaySession(inboxToken);
     relayRef.current = relay;
+    setActiveRelay(relay);
 
     const unsub = relay.onEnvelope(env => {
       handleIncomingEnvelope(env, identity.did, identity.messagingDid, ikPriv);
@@ -23,8 +27,9 @@ export function useRelay(): RelaySession | null {
       unsub();
       relay.disconnect();
       relayRef.current = null;
+      setActiveRelay(null);
     };
-  }, [identity?.messagingDid, ikPriv]);
+  }, [identity?.messagingDid, ikPriv, inboxToken]);
 
   return relayRef.current;
 }

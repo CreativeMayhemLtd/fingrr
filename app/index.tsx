@@ -3,7 +3,7 @@ import { View, Text, ActivityIndicator, TouchableOpacity, Platform } from 'react
 import { router } from 'expo-router';
 import { Agent } from '@atproto/api';
 import type { OAuthSession } from '@atproto/oauth-client-browser';
-import { bytesToHex } from '@noble/hashes/utils';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { getMasterKey, deriveEd25519Keypair, deriveX25519Keypair, didKeyFromEd25519 } from '@/crypto/keys';
 import { signPrekeyBundle } from '@/crypto/message';
 import { publishKeybundle } from '@/identity/atproto';
@@ -80,12 +80,18 @@ async function setupFromSession(session: OAuthSession, agent: Agent) {
 
   const ikHex = bytesToHex(ikPub);
   const spkHex = bytesToHex(spkPub);
-  const bundleSig = signPrekeyBundle(edPriv, messagingDid, ikHex, spkHex);
+
+  // Fresh random inbox token every session — relay address is never derivable
+  // from any public identity data, so observers can't link sessions to DIDs.
+  const inboxToken = bytesToHex(randomBytes(16));
+  devLog.info('setup', `inboxToken = ${inboxToken.slice(0, 8)}…`);
+
+  const bundleSig = signPrekeyBundle(edPriv, messagingDid, ikHex, spkHex, inboxToken);
 
   devLog.info('setup', 'publishing keybundle…');
   try {
     await publishKeybundle(agent, atprotoDid, {
-      did: messagingDid, identityKey: ikHex, signedPrekey: spkHex, sig: bundleSig,
+      did: messagingDid, identityKey: ikHex, signedPrekey: spkHex, sig: bundleSig, inboxToken,
     });
     devLog.ok('setup', 'keybundle published');
   } catch (e: any) {
@@ -98,7 +104,7 @@ async function setupFromSession(session: OAuthSession, agent: Agent) {
   });
   const handle = profile?.data?.handle ?? atprotoDid;
 
-  return { atprotoDid, handle, messagingDid, ikPub, spkPub, masterKey, edPriv, ikPriv, spkPriv };
+  return { atprotoDid, handle, messagingDid, ikPub, spkPub, masterKey, edPriv, ikPriv, spkPriv, inboxToken };
 }
 
 export default function Index() {
@@ -189,7 +195,7 @@ export default function Index() {
         if (cancelled) return;
         setIdentity(
           { did: data.atprotoDid, handle: data.handle, messagingDid: data.messagingDid, ikPub: data.ikPub, spkPub: data.spkPub },
-          data.masterKey, data.edPriv, data.ikPriv, data.spkPriv
+          data.masterKey, data.edPriv, data.ikPriv, data.spkPriv, data.inboxToken
         );
         devLog.ok('index', `identity set for ${data.handle} → /home`);
         router.replace('/home');

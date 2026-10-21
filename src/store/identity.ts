@@ -4,16 +4,18 @@ import type { FingrIdentity } from '@/types';
 interface IdentityState {
   identity: FingrIdentity | null;
   masterKey: Uint8Array | null;
-  edPrivateKey: Uint8Array | null;   // Ed25519 signing key (for messages)
-  ikPriv: Uint8Array | null;          // X25519 IK private key
-  spkPriv: Uint8Array | null;         // X25519 SPK private key
+  edPrivateKey: Uint8Array | null;
+  ikPriv: Uint8Array | null;
+  spkPriv: Uint8Array | null;
+  inboxToken: string | null;   // relay session ID — random per app start
   isInitialized: boolean;
   setIdentity: (
     identity: FingrIdentity,
     masterKey: Uint8Array,
     edPrivateKey: Uint8Array,
     ikPriv: Uint8Array,
-    spkPriv: Uint8Array
+    spkPriv: Uint8Array,
+    inboxToken: string,
   ) => void;
   clear: () => void;
 }
@@ -24,11 +26,12 @@ export const useIdentityStore = create<IdentityState>((set) => ({
   edPrivateKey: null,
   ikPriv: null,
   spkPriv: null,
+  inboxToken: null,
   isInitialized: false,
-  setIdentity: (identity, masterKey, edPrivateKey, ikPriv, spkPriv) =>
-    set({ identity, masterKey, edPrivateKey, ikPriv, spkPriv, isInitialized: true }),
+  setIdentity: (identity, masterKey, edPrivateKey, ikPriv, spkPriv, inboxToken) =>
+    set({ identity, masterKey, edPrivateKey, ikPriv, spkPriv, inboxToken, isInitialized: true }),
   clear: () => set({
     identity: null, masterKey: null, edPrivateKey: null,
-    ikPriv: null, spkPriv: null, isInitialized: false,
+    ikPriv: null, spkPriv: null, inboxToken: null, isInitialized: false,
   }),
 }));

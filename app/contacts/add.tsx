@@ -6,6 +6,7 @@ import { hexToBytes } from '@noble/hashes/utils';
 import { useContactsStore } from '@/store/contacts';
 import { useIdentityStore } from '@/store/identity';
 import { fetchKeybundle, resolveHandle } from '@/identity/atproto';
+import { verifyPrekeyBundle } from '@/crypto/message';
 import { relaySessionId } from '@/services/session';
 
 export default function AddContact() {
@@ -31,13 +32,23 @@ export default function AddContact() {
         Alert.alert('Invalid', 'Keybundle DID mismatch — possible tampering.');
         return;
       }
+      if (!verifyPrekeyBundle(bundle.prekey)) {
+        Alert.alert('Security error', 'Keybundle signature is invalid — possible MITM attack. Contact not added.');
+        return;
+      }
+
+      // Use the contact's inboxToken as the relay routing address.
+      // This is a random per-session value — not derivable from public identity
+      // data — so observers cannot link relay traffic to ATProto identities.
+      // Fall back to static derivation for legacy bundles without inboxToken.
+      const sessionId = bundle.prekey.inboxToken ?? relaySessionId(bundle.prekey.did);
 
       addContact({
         did,
         handle: h,
         messagingDid: bundle.prekey.did,
         ikPub: hexToBytes(bundle.prekey.identityKey),
-        sessionId: relaySessionId(bundle.prekey.did),
+        sessionId,
         addedAt: Date.now(),
       });
 

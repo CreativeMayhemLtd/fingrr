@@ -7,6 +7,7 @@ export interface PrekeyBundle {
   identityKey: string;
   signedPrekey: string;
   sig: string;
+  inboxToken: string;    // relay routing address — fresh random each session
   oneTimePrekey?: string;
   pqAlg?: number;
   pqSignedPrekey?: string;

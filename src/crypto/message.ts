@@ -152,14 +152,44 @@ export function verifyKeyAttestation(att: KeyAttestation): Uint8Array {
   return hexToBytes(att.x25519Pub);
 }
 
-// Sign a prekey bundle for publishing in ATProto fm.lysn.keybundle
+// Sign a prekey bundle for publishing in ATProto fm.lysn.keybundle.
+// inboxToken (when provided) is included in the signed payload, binding
+// the relay routing address to the key identity and preventing MITM swaps.
+// Bundles signed without inboxToken (v1 format) remain verifiable.
 export function signPrekeyBundle(
   edPrivateKey: Uint8Array,
   did: string,
   identityKeyHex: string,
-  signedPrekeyHex: string
+  signedPrekeyHex: string,
+  inboxToken?: string,
 ): string {
-  const bundle = { did, identityKey: identityKeyHex, signedPrekey: signedPrekeyHex };
-  const canonical = canonicalJson(bundle as Record<string, unknown>);
+  const bundle: Record<string, unknown> = { did, identityKey: identityKeyHex, signedPrekey: signedPrekeyHex };
+  if (inboxToken) bundle.inboxToken = inboxToken;
+  const canonical = canonicalJson(bundle);
   return sign(edPrivateKey, DOMAIN_PREKEY_BUNDLE, canonical);
+}
+
+// Verify a published prekey bundle's Ed25519 signature.
+// Handles both v1 (no inboxToken) and v2 (with inboxToken) formats.
+export function verifyPrekeyBundle(prekey: {
+  did: string;
+  identityKey: string;
+  signedPrekey: string;
+  inboxToken?: string;
+  sig?: string;
+}): boolean {
+  if (!prekey.sig) return false;
+  try {
+    const pubKey = ed25519PubFromDidKey(prekey.did);
+    const bundle: Record<string, unknown> = {
+      did: prekey.did,
+      identityKey: prekey.identityKey,
+      signedPrekey: prekey.signedPrekey,
+    };
+    if (prekey.inboxToken) bundle.inboxToken = prekey.inboxToken;
+    const canonical = canonicalJson(bundle);
+    return verify(pubKey, DOMAIN_PREKEY_BUNDLE, canonical, prekey.sig);
+  } catch {
+    return false;
+  }
 }

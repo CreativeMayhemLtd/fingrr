@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollView } from 'react-native';
 import { BskyAgent } from '@atproto/api';
-import { bytesToHex } from '@noble/hashes/utils';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { getMasterKey, deriveEd25519Keypair, deriveX25519Keypair, didKeyFromEd25519 } from '@/crypto/keys';
 import { signPrekeyBundle } from '@/crypto/message';
 import { publishKeybundle } from '@/identity/atproto';
@@ -60,17 +60,18 @@ export default function Onboarding() {
 
       const ikHex = bytesToHex(ikPub);
       const spkHex = bytesToHex(spkPub);
-      const bundleSig = signPrekeyBundle(edPriv, messagingDid, ikHex, spkHex);
+      const inboxToken = bytesToHex(randomBytes(16));
+      const bundleSig = signPrekeyBundle(edPriv, messagingDid, ikHex, spkHex, inboxToken);
 
       devLog.info('onboarding', 'publishing keybundle…');
       await publishKeybundle(agent, atprotoDid, {
-        did: messagingDid, identityKey: ikHex, signedPrekey: spkHex, sig: bundleSig,
+        did: messagingDid, identityKey: ikHex, signedPrekey: spkHex, sig: bundleSig, inboxToken,
       });
       devLog.ok('onboarding', 'keybundle published');
 
       setIdentity(
         { did: atprotoDid, handle: agent.session!.handle ?? h, messagingDid, ikPub, spkPub },
-        masterKey, edPriv, ikPriv, spkPriv
+        masterKey, edPriv, ikPriv, spkPriv, inboxToken
       );
       router.replace('/home');
     } catch (e: any) {
