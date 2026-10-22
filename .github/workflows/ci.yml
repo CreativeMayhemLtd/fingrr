@@ -12,11 +12,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
-      - name: Crypto unit tests
+      - name: Crypto unit tests (Lysn v1 envelope)
         run: node scripts/test-crypto.mjs
+      - name: X3DH + Double Ratchet tests
+        run: node --experimental-strip-types scripts/test-ratchet.ts
+      - name: Envelope v2 session tests
+        run: node --experimental-strip-types scripts/test-session.ts
       - name: ATProto flow integration tests (mock PDS)
         run: node scripts/test-atproto-flow.mjs
       - name: TypeScript check
@@ -31,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
       - name: Live ATProto integration test

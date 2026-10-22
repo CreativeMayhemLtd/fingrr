@@ -87,7 +87,7 @@ fingrr does not set a minimum age and does not collect personal data from any us
 
 ## 9. Security
 
-All messages are end-to-end encrypted using the Lysn v1 protocol: Ed25519 identity signatures, X25519 ECDH key agreement, and AES-256-GCM content encryption. Sender identity is sealed inside the encrypted envelope — the network and server operators see only ciphertext addressed to a random token, not to a person.
+All messages are end-to-end encrypted: Ed25519 identity signatures, X25519 key agreement, and AES-256-GCM content encryption. Between fingrr clients, messages additionally use X3DH session establishment and a Double Ratchet (forward secrecy; see CLAIMS.md and THREAT_MODEL.md in the repository for the exact properties and their tests). Sender identity is sealed inside the encrypted envelope — the network and server operators see only ciphertext addressed to a random token, not to a person.
 
 fingrr is open-source (Apache 2.0). Anyone can audit the cryptographic implementation at any time. We have no technical ability to read your messages, and cannot be compelled to produce plaintext we do not have.
 

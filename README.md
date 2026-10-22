@@ -1,8 +1,10 @@
 # fingrr
 
-**End-to-end encrypted, peer-to-peer messaging on the AT Protocol.**
+**End-to-end encrypted messaging on the AT Protocol. Blind signaling via your own PDS, direct WebRTC transport, optional blind push relay. Apache 2.0.**
 
-fingrr lets Bluesky users exchange encrypted messages without trusting any server with their content. Identity is your existing Bluesky account. Keys are derived from a secret that never leaves your device. Messages travel over WebRTC data channels; the relay server sees only pseudonymous session IDs and ciphertext it cannot read.
+fingrr lets Bluesky users exchange encrypted messages without trusting any server with their content. Identity is your existing Bluesky account. Keys are derived from a secret that never leaves your device. Signaling and offline delivery ride encrypted records on your own ATProto repo; live messages travel over direct WebRTC data channels.
+
+> **Status: proof of concept. Not audited.** Messages to offline peers are delivered via encrypted ATProto inbox records (store-and-forward on your own PDS); live messages use WebRTC. Do not use fingrr for anything requiring production-grade security guarantees until an external audit exists. See [CLAIMS.md](CLAIMS.md) for every security claim, its implementation, and the test that proves it, and [THREAT_MODEL.md](THREAT_MODEL.md) for what each adversary can and cannot learn.
 
 ---
 
@@ -10,80 +12,96 @@ fingrr lets Bluesky users exchange encrypted messages without trusting any serve
 
 ### Identity — your Bluesky DID as the address book
 
-fingrr uses ATProto OAuth (PKCE + DPoP) to authenticate you via your Bluesky account. No separate account or password is required. Your ATProto DID (`did:plc:…`) is your address — anyone on Bluesky can be a contact if they also run fingrr.
+fingrr authenticates via ATProto OAuth (web) or an app password (native). Your ATProto DID (`did:plc:…`) is your address — anyone on Bluesky can be a contact if they also run fingrr.
 
-After OAuth succeeds, fingrr derives a second "messaging identity" from your device's master key:
+A second "messaging identity" is derived from a device master key (SecureStore on native; wrapped under a non-extractable WebCrypto key in IndexedDB on web):
 
 ```
-masterKey (32 bytes, stored in SecureStore / localStorage)
-    │
-    ├─ HKDF("ed25519-identity:0") → Ed25519 keypair  → did:key:z…  (signing)
-    ├─ HKDF("x25519-ik:0")        → X25519 keypair   (identity key, long-term)
-    └─ HKDF("x25519-spk:0")       → X25519 keypair   (signed prekey)
+masterKey (32 bytes)
+    ├─ HKDF("ed25519-identity:0") → Ed25519 keypair → did:key:z… (signing)
+    └─ HKDF("x25519-ik:0")        → X25519 keypair  (long-term identity key)
 ```
 
-The `did:key` (Ed25519 public key encoded as a multibase DID) is your pseudonymous messaging address. The X25519 keys are used for per-message key wrapping.
+Signed prekeys and one-time prekeys are **random** (not derived), stored in the encrypted local DB, and deleted on rotation/use — the forward-secrecy argument depends on their erasability.
 
 ### Keybundle — public key discovery via ATProto
 
-Your public keys are bundled and published to your own ATProto repo under the `fm.lysn.keybundle` collection, `rkey = self`:
+Published to your own repo under `fm.lysn.keybundle` (rkey `self`):
 
-```json
-{
-  "$type": "fm.lysn.keybundle",
-  "atprotoDid": "did:plc:…",
-  "prekey": {
-    "did": "did:key:z…",
-    "identityKey": "<x25519-ik-pub hex>",
-    "signedPrekey": "<x25519-spk-pub hex>",
-    "sig": "<base58-encoded Ed25519 signature>"
-  }
-}
-```
+- `identityKey`, `signedPrekey` — X25519 public keys
+- `inboxToken` — 16 random bytes, fresh per session: your pseudonymous routing address. Never derivable from public identity data.
+- `sig` — Ed25519 signature binding keys + inboxToken to your `did:key` (domain `lysn-prekey-bundle/v1`)
+- `spkId`, `otpks[]`, `otpksSig` — envelope-v2 prekeys, signed under their own domain (`fingrr-otpk-batch/v1`)
 
-The signature (`sig`) covers the canonical JSON of `{ did, identityKey, signedPrekey }` under the domain-separated prefix `lysn-prekey-bundle/v1\x00`, binding the X25519 keys to the Ed25519 identity. Anyone can fetch and verify this bundle using `com.atproto.repo.getRecord` without any fingrr-specific infrastructure.
+Clients **verify these signatures on every fetch**. A compromised PDS cannot substitute keys, strip the one-time prekey batch, or redirect your routing token.
 
-### Encryption — Lysn envelope format (v1)
+### Encryption
 
-Each message is encrypted as a **Lysn envelope**:
+**Envelope v2 (default between fingrr clients): X3DH + Double Ratchet.**
+Sessions are established with X3DH (identity key + signed prekey + a one-time prekey when available) and messages flow through a Double Ratchet. Exact properties — no marketing words:
 
-```
-sealMessage(edPriv, myDid, theirDid, theirX25519Pub, body):
-  1. contentKey = random 32 bytes
-  2. ct = AES-256-GCM(contentKey, nonce, JSON(LysnMessage + sig))
-  3. wrapped = ECDH-wrap(contentKey, theirX25519Pub)
-       = ephPub(32) || nonce(12) || AES-256-GCM(HKDF(DH(ephPriv, theirPub)), nonce, contentKey)
-  4. return { v:1, to, wrapped: hex, ct: hex }
-```
+- *Per-message forward secrecy*: each message key is single-use and deleted; chain keys are overwritten on derivation.
+- *Post-compromise security*: after a full ratchet round trip in which the compromised party contributes a fresh ephemeral key, an attacker holding a stolen session state can no longer follow the conversation.
+- *X3DH with a one-time prekey*: an attacker who later obtains both peers' long-term keys **and** the full ciphertext transcript cannot derive the session key, because the one-time prekey private key was erased at use.
+- *Without a one-time prekey* (batch exhausted): the above guarantee only takes effect after the first ratchet round trip.
+- *Replay and tamper rejection*: message keys exist exactly once; headers are authenticated as AES-GCM associated data.
 
-The inner `LysnMessage` is signed with the sender's Ed25519 key before encryption:
+The whole v2 payload (sender identity, ratchet header, session id) is wrapped in a sealed-sender outer layer — ephemeral-static ECIES to the recipient's identity key. The wire carries **no** sender, no recipient, no header, no session id. This outer layer provides anonymity, not forward secrecy; compromise of the recipient's long-term identity key exposes ratchet *headers* of captured traffic, never plaintext.
 
-```
-domain = "lysn-msg/message/v1\x00"
-sig = Ed25519.sign(domain || canonicalJSON({ from, to, iat, body }), edPriv)
-```
+**Envelope v1 (legacy/Lysn2 interop, deprecated):** ephemeral-static X25519 → AES-256-GCM with a signed inner message. No forward secrecy: compromise of the recipient's identity key decrypts all captured v1 ciphertext. v1 also exposes the recipient's `did:key` in the wire `to` field. fingrr still *reads* v1 and *sends* it only to peers that publish no v2 prekeys. **Group messages currently use v1 fan-out** and inherit its properties.
 
-On receipt, `openMessage` decrypts the content key via ECDH unwrap, decrypts the payload, checks `to === myDid`, and verifies the sender's Ed25519 signature against their published `did:key`. A message with a bad or missing signature is rejected.
+### Transport — ATProto signaling + direct WebRTC
 
-### Transport — pseudonymous relay + WebRTC
+There is **no signaling server**. To connect, the caller writes an `fm.lysn.signal` record to their **own** PDS; the callee polls contacts' repos for records whose rkey starts with their own inboxToken. The entire signal body — including SDP offers/answers and ICE candidates, which contain IP addresses — is sealed to the recipient's identity key before it is written. Records are deleted after the connection establishes.
 
-**Relay server** (`server/`): a minimal WebSocket router that knows nothing about real identities.
+Once connected, messages flow over a DTLS-encrypted WebRTC data channel.
 
-- Clients connect as `ws://relay/?sid=<sessionId>` where `sessionId` is a 32-hex-char pseudonym derived as `SHA-256(messagingDid + "fingrr-relay-v1")[0..16]`.
-- The relay routes `SignalingMessage` blobs by the `to` field and logs nothing beyond connect/disconnect counts.
-- It does **not** store messages. If the recipient is offline, the message is dropped (delivery reliability is a future concern).
+**IP addresses, plainly:**
+- On a direct connection, **peers see each other's IP**. That is inherent to P2P.
+- STUN servers (Google, Cloudflare by default) see your IP and nothing else.
+- TURN is **off by default** — we operate no TURN server. If you configure your own (`EXPO_PUBLIC_TURN_URL/_USERNAME/_CREDENTIAL`), the TURN operator sees both peers' IPs and relays DTLS-encrypted traffic it cannot read.
+- The call screen shows whether a connection is **direct P2P** or **via TURN relay**.
 
-**WebRTC data channel**: once both peers have exchanged SDP offer/answer and ICE candidates through the relay, messages flow over a direct encrypted data channel. The relay is no longer in the path.
+Connect success rates between carrier NATs without TURN have **not** been measured; symmetric-NAT pairs will fail without a TURN server.
 
-```
-Alice                    Relay (blind)               Bob
-  |── offer (via relay) ──────────────────────────────▶|
-  |◀─ answer (via relay) ──────────────────────────────|
-  |── ICE candidates ────────────────────────────────▶|
-  |◀────────────────── ICE candidates ─────────────────|
-  |═══════════════ direct data channel (DTLS) ════════|
-  |── LysnEnvelope (ciphertext) ──────────────────────▶|
-```
+### Offline delivery — encrypted inbox records
+
+When the peer is offline, the sender writes the encrypted envelope as an `fm.lysn.inbox` record to the **sender's own** PDS, rkey-prefixed with the recipient's current inboxToken (fetched fresh from their signature-verified keybundle). Recipients poll contacts' repos on startup/reconnect. Records are ciphertext only and are pruned after 7 days. Delivery is sender-side best effort; there is no delivery receipt yet.
+
+### Push — relay-lite (the only server we operate)
+
+`server/` is a ~150-line Fastify service holding one in-memory map: `inboxToken → Expo push token`. On `/ping` it sends a **silent, empty** push so the recipient's app wakes and polls its own inbox. It stores no DIDs, no messages, no ciphertext; restart wipes it. It is rate-limited per IP and per recipient token.
+
+Push transits **Expo's push service and then Google FCM (Android) / Apple APNs (iOS)**. Per notification, Google/Apple and Expo see: the device push token, timestamp, priority, and the payload `{"type":"ping"}` — no message content, no sender, no recipient identity. If that metadata (your device receives *a* ping at time T) exceeds your threat model, disable notifications; the app then learns about messages only when foregrounded. The committed `google-services.json` is an all-zero placeholder.
+
+### Local storage
+
+Message history is stored in SQLite encrypted at rest with **SQLCipher**, keyed via HKDF from the SecureStore master key (native). A forensic image or unencrypted backup yields ciphertext.
+
+---
+
+## Privacy properties
+
+| What | Who can see it |
+|---|---|
+| Message content | Sender + recipient only |
+| Sender identity (v2) | Recipient only (sealed inside ciphertext) |
+| Recipient identity on the wire (v2) | Nobody (empty `to`; routing is by random token) |
+| Recipient identity on the wire (v1) | Anyone reading the record (`to` = did:key, linkable via keybundle) |
+| inboxToken ↔ DID link | Published in your own signed keybundle (pseudonymity is per-session: the token rotates each login) |
+| That you run fingrr | Your PDS operator + anyone (keybundle/signal/inbox records are in your public repo) |
+| Record timing/sizes | Your PDS operator + anyone watching your repo |
+| Group membership (DIDs, handles) | **Anyone** — `fm.lysn.group` records are public (known gap) |
+| IP addresses | Your peer (direct); STUN operator; TURN operator if you configure one |
+| Push metadata | Expo + Google/Apple: device token, ping timing; our relay: inboxToken ↔ push token |
+
+## Known limitations
+
+- **Groups use envelope v1**: no forward secrecy, and the public group record exposes membership. Both are roadmap items.
+- **One-time prekey races**: ATProto has no atomic prekey pop. Initiators pick randomly from the batch; a collision means the second session init is rejected and that sender must retry after the batch republishes.
+- **Web build is development-only**: SQLCipher is unavailable (plaintext DB) and, although the master key at rest is wrapped under a non-extractable WebCrypto key in IndexedDB, the unwrapped key necessarily exists in JS memory during use — any XSS is fatal. X25519 is not available as a non-extractable WebCrypto key type across target browsers.
+- **Pseudonymity is not anonymity**: your PDS operator sees that your account uses fingrr and when records are written. Content and counterparties are protected; the fact of usage is not.
+- **No delivery receipts, no multi-device, no key-change UX yet.**
 
 ---
 
@@ -91,118 +109,62 @@ Alice                    Relay (blind)               Bob
 
 ```
 fingrr/
-├── app/                        # Expo Router screens
-│   ├── index.tsx               # Boot / OAuth callback handler
-│   ├── onboarding/index.tsx    # Login screen (web: OAuth redirect; native: app-password)
-│   ├── home/index.tsx          # Contact list + logged-in identity header
-│   ├── chat/[did].tsx          # Conversation screen
-│   ├── contacts/add.tsx        # Add contact by Bluesky handle
-│   └── debug/index.tsx         # Crypto / network / OAuth smoke tests
-│
+├── app/                      # Expo Router screens (onboarding, home, chat, call, contacts, debug)
 ├── src/
-│   ├── auth/
-│   │   ├── atproto-oauth.ts        # Native stub
-│   │   └── atproto-oauth.web.ts    # BrowserOAuthClient (loopback client ID)
-│   │
 │   ├── crypto/
-│   │   ├── keys.ts / keys.web.ts   # Master key, HKDF derivation, did:key codec
-│   │   ├── encryption.ts           # AES-256-GCM seal/open + ECDH key wrap/unwrap
-│   │   ├── message.ts              # Lysn envelope: sealMessage / openMessage
-│   │   └── pow.ts                  # Proof-of-work (spam prevention, unused in MVP)
-│   │
-│   ├── identity/
-│   │   └── atproto.ts              # publishKeybundle / fetchKeybundle / resolveHandle
-│   │
+│   │   ├── keys.ts/.web.ts   # master key storage + HKDF derivation
+│   │   ├── didkey.ts         # did:key codec (pure)
+│   │   ├── encryption.ts     # AES-256-GCM + X25519 ECIES key wrap (pure)
+│   │   ├── message.ts        # Lysn envelope v1 + bundle/batch signatures (pure)
+│   │   ├── ratchet.ts        # X3DH + Double Ratchet (pure)
+│   │   └── session.ts        # envelope v2: sessions + sealed-sender outer (pure)
+│   ├── identity/atproto.ts   # keybundle publish/fetch (signature-verified)
 │   ├── transport/
-│   │   ├── signaling.ts            # WebSocket SignalingClient (pseudonymous)
-│   │   ├── webrtc.ts               # RTCPeerConnection wrapper
-│   │   └── datachannel.ts          # Encrypted data channel (Lysn envelopes over WebRTC)
-│   │
+│   │   ├── signaling.ts      # ATProto signal records, sealed payloads
+│   │   ├── webrtc.ts         # call peer connection
+│   │   └── icetype.ts        # direct vs TURN classification
 │   ├── services/
-│   │   ├── session.ts              # RelaySession + sessionId derivation
-│   │   └── messaging.ts            # High-level send/receive
-│   │
-│   ├── store/                      # Zustand stores
-│   │   ├── identity.ts             # Logged-in identity + in-memory private keys
-│   │   ├── contacts.ts             # Contact list
-│   │   └── conversations.ts        # Message history
-│   │
-│   ├── storage/                    # SQLite schema + models (WatermelonDB-ready)
-│   │   ├── schema.ts
-│   │   └── models/
-│   │
-│   ├── hooks/
-│   │   └── useRelay.ts             # React hook: relay connect/disconnect lifecycle
-│   │
-│   ├── debug/log.ts                # In-app devLog with subscriber pattern
-│   └── config.ts                   # RELAY_WS (dev: localhost, prod: wss://relay.fingrr.app)
-│
-└── server/                         # Relay server (Node.js + ws)
-    └── src/index.ts
+│   │   ├── messaging.ts      # send/receive, v2-with-v1-fallback
+│   │   ├── inbox.ts          # offline store-and-forward via own PDS
+│   │   ├── prekeys.ts        # SPK rotation, OTPK lifecycle, session store
+│   │   ├── group.ts          # group fan-out (v1)
+│   │   └── notifications.ts  # push relay client
+│   ├── db/                   # SQLCipher-encrypted SQLite
+│   └── store/                # Zustand state
+├── scripts/                  # test suites (44 tests, run in CI on every push)
+└── server/                   # push relay-lite (Fastify, in-memory, rate-limited)
 ```
 
----
-
-## OAuth flow (web)
-
-ATProto OAuth for native/loopback clients is non-trivial in an SPA because:
-
-1. The library (`@atproto/oauth-client-browser`) defaults to `responseMode='fragment'` — OAuth params land in `window.location.hash`.
-2. Expo Router calls `history.replaceState()` during startup, stripping the hash before any `useEffect` fires.
-
-**Fix**: `app/index.tsx` captures `window.location.hash` synchronously at module level — before React renders — into `capturedCallbackParams`. On callback, `oauthClient.initCallback(capturedCallbackParams)` is called with those params instead of `oauthClient.init()`.
-
-The loopback client ID is `http://localhost?redirect_uri=http%3A%2F%2F127.0.0.1%3A8081%2F` (built by `buildLoopbackClientId`). Metro dev server must be accessed via `127.0.0.1:8081`, not `localhost:8081`.
-
-Required OAuth scope: `atproto transition:generic` (write access to ATProto repo for keybundle publishing).
-
----
-
-## Privacy properties
-
-| What                          | Who can see it        |
-|-------------------------------|-----------------------|
-| Message content               | Sender + recipient only |
-| Sender identity inside envelope | Recipient only (encrypted) |
-| Recipient pseudonym (`sid`)   | Relay (cannot correlate to ATProto DID) |
-| IP addresses                  | Relay during signaling; direct after ICE |
-| Keybundle (public keys)       | Anyone (published to ATProto repo) |
-| ATProto DID ↔ messaging DID binding | Anyone (keybundle is public) |
-
-The relay is intentionally minimal — it cannot read message content, does not authenticate clients, and does not record which session IDs communicate with each other beyond what's needed to route the current connection.
+"Pure" modules have no React Native imports — the test suites in `scripts/` run them directly under Node.
 
 ---
 
 ## Getting started
 
-### Prerequisites
-
-- Node.js 20+
-- Expo CLI (`npm i -g expo`)
-- A Bluesky account
-
-### Run the relay server
-
-```bash
-cd server
-npm install
-npm run dev        # ts-node-dev, port 3001
-```
-
-### Run the app (web)
+Prereqs: Node 20+ (24 for the TS test suites), a Bluesky account.
 
 ```bash
 npm install
-npx expo start --web
+npx expo start          # native dev client
+npx expo start --web    # web (development only — see limitations)
 ```
 
-Open **http://127.0.0.1:8081** (not `localhost` — required for ATProto loopback OAuth).
+Web + ATProto OAuth: open **http://127.0.0.1:8081** (not `localhost` — loopback client ID requirement). OAuth scope: `atproto transition:generic`.
 
-### Docker (relay)
+Run the tests:
 
 ```bash
-docker compose up          # dev
-docker compose -f docker-compose.prod.yml up   # prod
+node scripts/test-crypto.mjs                                  # v1 envelope (9)
+node --experimental-strip-types scripts/test-ratchet.ts      # X3DH + DR (16)
+node --experimental-strip-types scripts/test-session.ts      # envelope v2 (10)
+node scripts/test-atproto-flow.mjs                           # mock-PDS flow (9)
+BSKY_HANDLE=… BSKY_APP_PASSWORD=… node scripts/test-live-atproto.mjs  # live PDS (6)
+```
+
+Push relay (optional, self-hostable):
+
+```bash
+cd server && npm install && node index.js   # PORT, RELAY_SECRET env vars
 ```
 
 ---
@@ -212,35 +174,21 @@ docker compose -f docker-compose.prod.yml up   # prod
 | Layer | Library |
 |---|---|
 | App framework | Expo SDK 52 / Expo Router 4 |
-| ATProto identity | `@atproto/api`, `@atproto/oauth-client-browser` |
-| Cryptography | `@noble/curves`, `@noble/hashes`, `@noble/ciphers` |
-| Key storage | `expo-secure-store` (native) / `localStorage` (web) |
-| State | Zustand |
-| Transport | WebRTC (`react-native-webrtc`), WebSocket relay |
-| Relay server | Node.js + `ws` |
-
-All cryptographic primitives are from the [`@noble`](https://paulmillr.com/noble/) family — audited, zero-dependency, pure TypeScript/JavaScript. No native crypto bindings are used for the encryption layer.
+| ATProto | `@atproto/api`, `@atproto/oauth-client-browser` |
+| Cryptography | `@noble/curves`, `@noble/hashes`, `@noble/ciphers` (audited, zero-dependency) |
+| Key storage | `expo-secure-store` (native) / wrapped WebCrypto key in IndexedDB (web) |
+| Local DB | `expo-sqlite` + SQLCipher |
+| Transport | `react-native-webrtc` |
+| Push relay | Node.js + Fastify + `expo-server-sdk` |
 
 ---
 
 ## Lysn compatibility
 
-The envelope format (`fm.lysn.keybundle`, `LysnEnvelope v1`, domain-separated signatures) is designed to be wire-compatible with the [Lysn2 messaging protocol](https://lysn.fm). A fingrr user and a Lysn2 client can exchange messages without modification, provided both have fetched each other's keybundle.
+Envelope v1 (`fm.lysn.keybundle`, `LysnEnvelope v1`, domain-separated signatures) is wire-compatible with the [Lysn2 messaging protocol](https://lysn.fm). Envelope v2 (X3DH/Double Ratchet, `spkId`/`otpks` bundle fields) is a fingrr extension; fingrr falls back to v1 toward peers that don't publish v2 prekeys.
 
 ---
 
-## Status
+## License
 
-Early development / proof of concept. Not audited. Do not use for anything requiring production-grade security guarantees.
-
-- [x] ATProto OAuth login (web)
-- [x] App-password login (native)
-- [x] Key derivation + keybundle publishing
-- [x] Lysn envelope encrypt / decrypt
-- [x] Relay server + pseudonymous signaling
-- [x] WebRTC peer connection
-- [ ] Persistent message storage (SQLite/WatermelonDB)
-- [ ] Offline message queuing
-- [ ] Key rotation
-- [ ] One-time prekeys
-- [ ] Push notifications
+Apache 2.0 — © 2026 Creative Mayhem UG (haftungsbeschränkt). See [LICENSE](LICENSE), [PRIVACY.md](PRIVACY.md), [CLAIMS.md](CLAIMS.md), [THREAT_MODEL.md](THREAT_MODEL.md).

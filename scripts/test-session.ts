@@ -178,5 +178,47 @@ await test('session state survives store persistence (serialize round trip)', as
   assert((await openMessageV2(B.my, B.store, e2)).body === 'm2');
 });
 
+// ── Keybundle / OTPK batch signature verification ────────────────────────────
+
+const { signPrekeyBundle, verifyPrekeyBundle, signOtpkBatch, verifyOtpkBatch } =
+  await import('../src/crypto/message.ts');
+
+await test('keybundle: valid signature verifies; tampered identityKey rejected', async () => {
+  const edPriv = ed25519.utils.randomPrivateKey();
+  const did = didKeyFromEd25519(ed25519.getPublicKey(edPriv));
+  const ik = bytesToHex(x25519.getPublicKey(randomBytes(32)));
+  const spk = bytesToHex(x25519.getPublicKey(randomBytes(32)));
+  const token = bytesToHex(randomBytes(16));
+  const sig = signPrekeyBundle(edPriv, did, ik, spk, token);
+
+  assert(verifyPrekeyBundle({ did, identityKey: ik, signedPrekey: spk, inboxToken: token, sig }));
+  // A PDS substituting its own identity key must fail verification
+  const evilIk = bytesToHex(x25519.getPublicKey(randomBytes(32)));
+  assert(!verifyPrekeyBundle({ did, identityKey: evilIk, signedPrekey: spk, inboxToken: token, sig }),
+    'tampered identityKey accepted');
+  // A swapped routing token must fail too (prevents message redirection)
+  const evilToken = bytesToHex(randomBytes(16));
+  assert(!verifyPrekeyBundle({ did, identityKey: ik, signedPrekey: spk, inboxToken: evilToken, sig }),
+    'tampered inboxToken accepted');
+  // Missing signature is rejected, never treated as legacy-OK
+  assert(!verifyPrekeyBundle({ did, identityKey: ik, signedPrekey: spk, inboxToken: token }),
+    'unsigned bundle accepted');
+});
+
+await test('OTPK batch: strip/swap/inject all rejected', async () => {
+  const edPriv = ed25519.utils.randomPrivateKey();
+  const did = didKeyFromEd25519(ed25519.getPublicKey(edPriv));
+  const otpks = [1, 2, 3].map(id => ({ id, pub: bytesToHex(x25519.getPublicKey(randomBytes(32))) }));
+  const sig = signOtpkBatch(edPriv, 5, otpks);
+
+  assert(verifyOtpkBatch(did, 5, otpks, sig), 'valid batch rejected');
+  assert(!verifyOtpkBatch(did, 5, otpks.slice(0, 2), sig), 'stripped batch accepted');
+  const injected = [...otpks, { id: 4, pub: bytesToHex(x25519.getPublicKey(randomBytes(32))) }];
+  assert(!verifyOtpkBatch(did, 5, injected, sig), 'injected prekey accepted');
+  const swapped = otpks.map((o, i) => i === 0 ? { ...o, pub: bytesToHex(x25519.getPublicKey(randomBytes(32))) } : o);
+  assert(!verifyOtpkBatch(did, 5, swapped, sig), 'swapped prekey accepted');
+  assert(!verifyOtpkBatch(did, 6, otpks, sig), 'changed spkId accepted');
+});
+
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed\n`);
 if (failed > 0) process.exit(1);
