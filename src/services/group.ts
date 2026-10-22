@@ -76,7 +76,8 @@ export async function createGroup(name: string, contacts: Contact[]): Promise<Gr
         displayName: m.displayName ?? null,
         messagingDid: m.messagingDid,
         ikPubHex: bytesToHex(m.ikPub),
-        sessionId: m.sessionId,
+        // sessionId deliberately NOT published: it would hand any observer the
+        // DID↔inboxToken mapping and break pseudonymous inbox addressing
         addedAt: m.addedAt,
       })),
     },
@@ -110,7 +111,7 @@ export async function fetchGroupRecord(adminDid: string, groupId: string): Promi
     const json = await res.json();
     const rec = json.value as {
       id: string; name: string; adminDid: string; createdAt: number;
-      members: Array<{ did: string; handle: string; displayName?: string | null; messagingDid: string; ikPubHex: string; sessionId: string; addedAt: number }>;
+      members: Array<{ did: string; handle: string; displayName?: string | null; messagingDid: string; ikPubHex: string; sessionId?: string; addedAt: number }>;
     };
     return {
       id: rec.id,
@@ -122,7 +123,7 @@ export async function fetchGroupRecord(adminDid: string, groupId: string): Promi
         displayName: m.displayName ?? undefined,
         messagingDid: m.messagingDid,
         ikPub: hexToBytes(m.ikPubHex),
-        sessionId: m.sessionId,
+        sessionId: m.sessionId ?? '',
         addedAt: m.addedAt,
       })),
     };
@@ -157,7 +158,9 @@ export async function sendGroupMessage(group: Group, body: string, isSystem = fa
     if (peer?.dataChannelOpen()) {
       peer.sendEnvelope(env);
     } else {
-      await writeInboxRecord(member.sessionId, env);
+      // writeInboxRecord expects the recipient's ATProto DID — it resolves the
+      // current inboxToken from their keybundle itself (fresh-token logic)
+      await writeInboxRecord(member.did, env);
     }
   }));
 

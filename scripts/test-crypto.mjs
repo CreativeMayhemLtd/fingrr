@@ -86,6 +86,7 @@ function openContent(ciphertext, contentKey) {
 
 // sealMessage / openMessage
 function sealMessage(edPriv, myDid, toDid, toX25519Pub, body, iat) {
+  if (body.length > 32 * 1024) throw new Error('body too large');
   const msgObj = { from: myDid, to: toDid, iat, body };
   const canonical = canonicalJson(msgObj);
   msgObj.sig = sign(edPriv, DOMAIN_MESSAGE, canonical);
