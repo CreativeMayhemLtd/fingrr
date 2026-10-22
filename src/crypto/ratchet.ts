@@ -152,17 +152,18 @@ export class DoubleRatchet {
   }
 
   // Initiator: knows the responder's signed prekey (their initial ratchet key).
+  // Inputs are copied — callers may zero their buffers afterwards.
   static initAlice(sk: Uint8Array, theirSpkPub: Uint8Array): DoubleRatchet {
     const dhsPriv = randomBytes(32);
     const dhsPub = x25519.getPublicKey(dhsPriv);
     const { rk, ck } = kdfRk(sk, x25519.getSharedSecret(dhsPriv, theirSpkPub));
-    const r = new DoubleRatchet(rk, dhsPriv, dhsPub, theirSpkPub, ck);
-    return r;
+    return new DoubleRatchet(rk, dhsPriv, dhsPub, new Uint8Array(theirSpkPub), ck);
   }
 
   // Responder: their SPK pair is the initial ratchet keypair.
+  // Inputs are copied — callers may zero their buffers afterwards.
   static initBob(sk: Uint8Array, spkPriv: Uint8Array, spkPub: Uint8Array): DoubleRatchet {
-    return new DoubleRatchet(sk, spkPriv, spkPub, null, null);
+    return new DoubleRatchet(new Uint8Array(sk), new Uint8Array(spkPriv), new Uint8Array(spkPub), null, null);
   }
 
   get publicKey(): string { return bytesToHex(this.dhsPub); }

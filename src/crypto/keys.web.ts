@@ -3,7 +3,6 @@ import { x25519 } from '@noble/curves/ed25519';
 import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import bs58 from 'bs58';
 
 // ── IndexedDB helpers ────────────────────────────────────────────────────────
 
@@ -130,17 +129,4 @@ export function deriveX25519Keypair(masterKey: Uint8Array, purpose: string, inde
   return { privateKey, publicKey };
 }
 
-export function didKeyFromEd25519(pubkey: Uint8Array): string {
-  const prefixed = new Uint8Array(2 + pubkey.length);
-  prefixed[0] = 0xed;
-  prefixed[1] = 0x01;
-  prefixed.set(pubkey, 2);
-  return 'did:key:z' + bs58.encode(prefixed);
-}
-
-export function ed25519PubFromDidKey(did: string): Uint8Array {
-  if (!did.startsWith('did:key:z')) throw new Error('not an ed25519 did:key');
-  const decoded = bs58.decode(did.slice('did:key:z'.length));
-  if (decoded[0] !== 0xed || decoded[1] !== 0x01) throw new Error('not an ed25519 key');
-  return decoded.slice(2);
-}
+export { didKeyFromEd25519, ed25519PubFromDidKey } from './didkey';
