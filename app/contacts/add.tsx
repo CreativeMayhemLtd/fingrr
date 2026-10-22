@@ -7,7 +7,6 @@ import { useContactsStore } from '@/store/contacts';
 import { useIdentityStore } from '@/store/identity';
 import { fetchKeybundle, resolveHandle } from '@/identity/atproto';
 import { verifyPrekeyBundle } from '@/crypto/message';
-import { relaySessionId } from '@/services/session';
 
 export default function AddContact() {
   const [handle, setHandle] = useState('');
@@ -37,11 +36,16 @@ export default function AddContact() {
         return;
       }
 
-      // Use the contact's inboxToken as the relay routing address.
-      // This is a random per-session value — not derivable from public identity
-      // data — so observers cannot link relay traffic to ATProto identities.
-      // Fall back to static derivation for legacy bundles without inboxToken.
-      const sessionId = bundle.prekey.inboxToken ?? relaySessionId(bundle.prekey.did);
+      // Use the contact's inboxToken as the routing address. This is a random
+      // per-session value — not derivable from public identity data — so
+      // observers cannot link records to ATProto identities. A bundle without
+      // one would force a DID-derived (publicly precomputable) address, so it
+      // is rejected rather than downgraded.
+      const sessionId = bundle.prekey.inboxToken;
+      if (!sessionId) {
+        Alert.alert('Incompatible', 'This contact\'s keybundle has no inbox token. Ask them to update their app and re-publish.');
+        return;
+      }
 
       addContact({
         did,

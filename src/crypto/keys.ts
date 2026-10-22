@@ -58,10 +58,3 @@ export function ed25519PubFromDidKey(did: string): Uint8Array {
   if (decoded[0] !== 0xed || decoded[1] !== 0x01) throw new Error('not an ed25519 key');
   return decoded.slice(2);
 }
-
-// Derive pseudonymous session ID for signaling (never reveals real DID)
-export function deriveSessionId(masterKey: Uint8Array, contactDid: string): string {
-  const info = new TextEncoder().encode(`fingrr:session-id:${contactDid}`);
-  const derived = hkdf(sha256, masterKey, undefined, info, 16);
-  return bytesToHex(derived);
-}
