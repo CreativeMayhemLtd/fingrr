@@ -8,6 +8,8 @@ import {
   RTCIceCandidate,
   RTCSessionDescription,
 } from 'react-native-webrtc';
+import { ICE_SERVERS } from '@/config';
+import { classifyConnection, type ConnectionType } from '@/transport/icetype';
 
 export { mediaDevices } from 'react-native-webrtc';
 
@@ -16,18 +18,18 @@ interface ISignaling {
   onMessage(handler: (msg: { type: string; from: string; to: string; payload: string }) => void): () => void;
 }
 
-const RTC_CONFIG = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun.cloudflare.com:3478' },
-  ],
-};
+const RTC_CONFIG = { iceServers: ICE_SERVERS };
 
 export class CallPeerConnection {
   private pc: InstanceType<typeof RTCPeerConnection>;
   private onDataChannel?: (dc: unknown) => void;
   private onStream?: (stream: unknown) => void;
   private unsubs: Array<() => void> = [];
+
+  // How this connection actually runs: direct (host/srflx) or TURN-relayed.
+  async connectionType(): Promise<ConnectionType> {
+    return classifyConnection(this.pc as any);
+  }
 
   constructor(
     private signaling: ISignaling,

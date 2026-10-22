@@ -1,9 +1,20 @@
-// STUN servers only — stateless NAT traversal, they see your IP but nothing else.
-// No TURN. No relay. Pure P2P once WebRTC connects.
+// STUN: stateless NAT traversal — the STUN server sees your IP but nothing else.
+// TURN is OFF by default (we operate no TURN server). Peers behind symmetric
+// NATs that cannot connect directly may configure their own TURN server via
+// env; the TURN operator then sees both peers' IPs and relays DTLS-encrypted
+// traffic it cannot read.
 export const STUN_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun.cloudflare.com:3478' },
 ];
+
+const TURN_URL = process.env.EXPO_PUBLIC_TURN_URL ?? '';
+const TURN_USERNAME = process.env.EXPO_PUBLIC_TURN_USERNAME ?? '';
+const TURN_CREDENTIAL = process.env.EXPO_PUBLIC_TURN_CREDENTIAL ?? '';
+
+export const ICE_SERVERS: RTCIceServer[] = TURN_URL
+  ? [...STUN_SERVERS, { urls: TURN_URL, username: TURN_USERNAME, credential: TURN_CREDENTIAL }]
+  : STUN_SERVERS;
 
 // ATProto collections
 export const COLLECTION_SIGNAL        = 'fm.lysn.signal';         // WebRTC signaling (short-lived)
