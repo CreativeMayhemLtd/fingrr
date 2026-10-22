@@ -1,4 +1,4 @@
-import { BrowserOAuthClient, buildLoopbackClientId } from '@atproto/oauth-client-browser';
+import { BrowserOAuthClient } from '@atproto/oauth-client-browser';
 
 // buildLoopbackClientId(window.location) returns e.g.:
 //   http://localhost?redirect_uri=http%3A%2F%2F127.0.0.1%3A8081%2F
@@ -14,11 +14,24 @@ import { BrowserOAuthClient, buildLoopbackClientId } from '@atproto/oauth-client
 // server rejects with invalid_scope. Keep in sync with signInRedirect().
 export const OAUTH_SCOPE = 'atproto transition:generic';
 
-const clientId =
-  (typeof window !== 'undefined'
-    ? buildLoopbackClientId(window.location)
-    : 'http://localhost?redirect_uri=http%3A%2F%2F127.0.0.1%3A8081%2F'
-  ) + `&scope=${encodeURIComponent(OAUTH_SCOPE)}`;
+// Built explicitly, NOT via buildLoopbackClientId(window.location): that
+// helper embeds location.pathname, and if this module happens to load while
+// the browser is on e.g. /onboarding, the client_id gains a path component,
+// which @atproto/oauth-types' loopback validator rejects outright
+// ("Value must not contain a path component"). The loopback client_id must
+// be exactly http://localhost?<query>; the redirect always targets the app
+// root, where the OAuth callback handler (app/index.tsx) lives.
+function loopbackClientId(): string {
+  let redirect = 'http://127.0.0.1:8081/';
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
+    const port = window.location.port ? `:${window.location.port}` : '';
+    redirect = `http://${host}${port}/`;
+  }
+  return `http://localhost?redirect_uri=${encodeURIComponent(redirect)}&scope=${encodeURIComponent(OAUTH_SCOPE)}`;
+}
+
+const clientId = loopbackClientId();
 
 export const oauthClientPromise: Promise<BrowserOAuthClient> = BrowserOAuthClient.load({
   clientId,
