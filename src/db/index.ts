@@ -122,6 +122,9 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
       created_at INTEGER NOT NULL
     );
   `);
+  // Additive migrations (ALTER has no IF NOT EXISTS)
+  await db.execAsync(`ALTER TABLE contacts ADD COLUMN verified INTEGER NOT NULL DEFAULT 0`)
+    .catch(() => { /* column already exists */ });
 }
 
 // ── Messages ─────────────────────────────────────────────────────────────────
@@ -203,24 +206,32 @@ export async function pruneSeenInbox(olderThanMs: number): Promise<void> {
 export async function saveContact(c: {
   did: string; handle: string; displayName?: string;
   messagingDid: string; ikPubHex: string; sessionId: string; addedAt: number;
+  verified?: boolean;
 }): Promise<void> {
   const db = await getDB();
   await db.runAsync(
     `INSERT OR REPLACE INTO contacts
-     (did, handle, display_name, messaging_did, ik_pub_hex, session_id, added_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [c.did, c.handle, c.displayName ?? null, c.messagingDid, c.ikPubHex, c.sessionId, c.addedAt],
+     (did, handle, display_name, messaging_did, ik_pub_hex, session_id, added_at, verified)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [c.did, c.handle, c.displayName ?? null, c.messagingDid, c.ikPubHex, c.sessionId, c.addedAt, c.verified ? 1 : 0],
   );
+}
+
+export async function setContactVerified(did: string, verified: boolean): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(`UPDATE contacts SET verified = ? WHERE did = ?`, [verified ? 1 : 0, did]);
 }
 
 export async function loadContacts(): Promise<{
   did: string; handle: string; displayName?: string;
   messagingDid: string; ikPubHex: string; sessionId: string; addedAt: number;
+  verified: boolean;
 }[]> {
   const db = await getDB();
   const rows = await db.getAllAsync<{
     did: string; handle: string; display_name: string | null;
     messaging_did: string; ik_pub_hex: string; session_id: string; added_at: number;
+    verified: number | null;
   }>(`SELECT * FROM contacts ORDER BY added_at ASC`);
   return rows.map(r => ({
     did: r.did,
@@ -230,6 +241,7 @@ export async function loadContacts(): Promise<{
     ikPubHex: r.ik_pub_hex,
     sessionId: r.session_id,
     addedAt: r.added_at,
+    verified: !!r.verified,
   }));
 }
 

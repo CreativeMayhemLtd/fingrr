@@ -56,7 +56,11 @@ The whole v2 payload (sender identity, ratchet header, session id) is wrapped in
 
 There is **no signaling server**. To connect, the caller writes an `fm.lysn.signal` record to their **own** PDS; the callee polls contacts' repos for records whose rkey starts with their own inboxToken. The entire signal body — including SDP offers/answers and ICE candidates, which contain IP addresses — is sealed to the recipient's identity key before it is written. Records are deleted after the connection establishes.
 
+Every signal body is Ed25519-signed by the sender's messaging identity inside the sealed payload; receivers verify the signature, enforce a freshness window, and resolve the sender by verified identity — a malicious contact cannot impersonate another contact's call setup.
+
 Once connected, messages flow over a DTLS-encrypted WebRTC data channel.
+
+**Voice/video calls**: media is DTLS-SRTP with ephemeral per-call keys, peer-to-peer. Because the SDP (which carries the DTLS certificate fingerprint) is identity-signed, call media keys chain up to the same identity root as messages. Contacts can additionally compare **safety numbers** (shield icon in any chat): both devices derive the same 60-digit number from the two identities — matching numbers rule out a key-substitution MITM.
 
 **IP addresses, plainly:**
 - On a direct connection, **peers see each other's IP**. That is inherent to P2P.
@@ -103,7 +107,7 @@ Message history is stored in SQLite encrypted at rest with **SQLCipher**, keyed 
 - **One-time prekey races**: ATProto has no atomic prekey pop. Initiators pick randomly from the batch; a collision means the second session init is rejected and that sender must retry after the batch republishes.
 - **Web build is development-only**: SQLCipher is unavailable (plaintext DB) and, although the master key at rest is wrapped under a non-extractable WebCrypto key in IndexedDB, the unwrapped key necessarily exists in JS memory during use — any XSS is fatal. X25519 is not available as a non-extractable WebCrypto key type across target browsers.
 - **Pseudonymity is not anonymity**: your PDS operator sees that your account uses fingrr and when records are written. Content and counterparties are protected; the fact of usage is not.
-- **No delivery receipts, no multi-device, no key-change UX yet.**
+- **No delivery receipts, no multi-device, no key-change *alerts* yet** (safety numbers exist for manual verification; automatic "contact's key changed" warnings are roadmap).
 
 ---
 
@@ -133,7 +137,7 @@ fingrr/
 │   │   └── notifications.ts  # push relay client
 │   ├── db/                   # SQLCipher-encrypted SQLite
 │   └── store/                # Zustand state
-├── scripts/                  # test suites (46 in CI + 7 live-PDS, 53 total)
+├── scripts/                  # test suites (48 in CI + 7 live-PDS, 55 total)
 └── server/                   # push relay-lite (Fastify, in-memory, rate-limited)
 ```
 
@@ -158,7 +162,7 @@ Run the tests:
 ```bash
 node scripts/test-crypto.mjs                                  # v1 envelope (9)
 node --experimental-strip-types scripts/test-ratchet.ts      # X3DH + DR (16)
-node --experimental-strip-types scripts/test-session.ts      # envelope v2 (10)
+node --experimental-strip-types scripts/test-session.ts      # envelope v2 + signatures (14)
 node scripts/test-atproto-flow.mjs                           # mock-PDS flow (9)
 BSKY_HANDLE=… BSKY_APP_PASSWORD=… node --experimental-strip-types scripts/test-live-atproto.ts  # live PDS, v2 (7)
 ```

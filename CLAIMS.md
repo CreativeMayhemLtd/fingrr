@@ -11,7 +11,7 @@ Test suites (all run in CI on every push, `.github/workflows/ci.yml`):
 |---|---|---|
 | v1 envelope | `scripts/test-crypto.mjs` | 9 |
 | X3DH + Double Ratchet | `scripts/test-ratchet.ts` | 16 |
-| Envelope v2 sessions + bundle verification | `scripts/test-session.ts` | 12 |
+| Envelope v2 sessions + bundle/signal verification + safety numbers | `scripts/test-session.ts` | 14 |
 | ATProto inbox flow (mock PDS) | `scripts/test-atproto-flow.mjs` | 9 |
 | Live PDS round trip, envelope v2 | `scripts/test-live-atproto.ts` (secrets-gated in CI) | 7 |
 
@@ -52,6 +52,9 @@ rejection, token filtering. Last run 2026-10-22 against bsky.social: **7/7**.
 | Claim | Implementation | Test |
 |---|---|---|
 | Signal records (SDP/ICE/IPs) sealed to recipient before PDS write | `transport/signaling.ts` `send` | **Untested** (see below) |
+| Signal bodies Ed25519-signed inside the seal; a contact cannot impersonate another contact in call setup (sender resolved by verified DID, never by token) | `message.ts` `signSignalBody`/`verifySignalBody`; `transport/signaling.ts` send/_poll (freshness window, DID→contact resolution) | test-session: "signal body: valid signature verifies; impersonation rejected" |
+| Call media keys chain to the identity root: the SDP carrying the DTLS fingerprint is signed, and WebRTC enforces the remote cert matches that fingerprint | signed signaling (above) + standard DTLS-SRTP fingerprint check | signature link tested above; end-to-end call MITM test **untested** (needs devices) |
+| Safety numbers: both devices derive the identical 60-digit number; distinct per contact pair | `crypto/safety.ts`; UI in `app/verify/[did].tsx` | test-session: "safety number: identical on both sides, distinct per pair, stable format" |
 | Inbox records are ciphertext-only; recipient addressed by token prefix only | `services/inbox.ts` `writeInboxRecord` | test-atproto-flow: sealed sender + prefix filtering; test-live-atproto: live plaintext-absence |
 | Offline store-and-forward works end-to-end | `services/inbox.ts` + `services/messaging.ts` | test-atproto-flow: write → poll → decrypt (incl. pagination, stale-token recovery); test-live-atproto: against bsky.social |
 | Group records no longer publish member inboxTokens | `services/group.ts` (sessionId stripped from published record) | **Untested** |

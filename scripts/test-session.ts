@@ -220,5 +220,50 @@ await test('OTPK batch: strip/swap/inject all rejected', async () => {
   assert(!verifyOtpkBatch(did, 6, otpks, sig), 'changed spkId accepted');
 });
 
+// ── Signal-body signing (call setup authenticity) ────────────────────────────
+
+const { signSignalBody, verifySignalBody } = await import('../src/crypto/message.ts');
+
+await test('signal body: valid signature verifies; impersonation rejected', async () => {
+  const edA = ed25519.utils.randomPrivateKey();
+  const didA = didKeyFromEd25519(ed25519.getPublicKey(edA));
+  const edM = ed25519.utils.randomPrivateKey();  // Mallory
+  const didM = didKeyFromEd25519(ed25519.getPublicKey(edM));
+
+  const body = signSignalBody(edA, {
+    type: 'offer', from: 'aabbccdd', payload: 'base64sdp', did: didA, iat: Math.floor(Date.now() / 1000),
+  });
+  assert(verifySignalBody(body), 'valid signal rejected');
+
+  // Mallory signs a body claiming Alice's did — fails (not her key)
+  const forged = signSignalBody(edM, { ...body, sig: undefined, did: didA } as any);
+  assert(!verifySignalBody(forged), 'forged did accepted');
+  // Mallory claims her own did but Alice's token — signature verifies, but the
+  // RECEIVER must also check did ↔ token binding (tested at the layer above);
+  // here we prove tampering any signed field breaks the signature:
+  assert(!verifySignalBody({ ...body, from: 'ffffffff' }), 'tampered token accepted');
+  assert(!verifySignalBody({ ...body, payload: 'evil' }), 'tampered payload accepted');
+  assert(!verifySignalBody({ ...body, iat: body.iat + 1 }), 'tampered iat accepted');
+  assert(!verifySignalBody({ ...body, sig: undefined } as any), 'unsigned accepted');
+});
+
+// ── Safety numbers ───────────────────────────────────────────────────────────
+
+const { safetyNumber } = await import('../src/crypto/safety.ts');
+
+await test('safety number: identical on both sides, distinct per pair, stable format', async () => {
+  const didA = didKeyFromEd25519(ed25519.getPublicKey(ed25519.utils.randomPrivateKey()));
+  const didB = didKeyFromEd25519(ed25519.getPublicKey(ed25519.utils.randomPrivateKey()));
+  const didC = didKeyFromEd25519(ed25519.getPublicKey(ed25519.utils.randomPrivateKey()));
+
+  const ab = safetyNumber(didA, didB);
+  const ba = safetyNumber(didB, didA);
+  assert(ab.join('') === ba.join(''), 'order-dependent safety number');
+  assert(ab.length === 12 && ab.every(g => /^\d{5}$/.test(g)), 'bad format');
+  assert(ab.join('') !== safetyNumber(didA, didC).join(''), 'collision across pairs');
+  // deterministic
+  assert(ab.join('') === safetyNumber(didA, didB).join(''), 'non-deterministic');
+});
+
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed\n`);
 if (failed > 0) process.exit(1);

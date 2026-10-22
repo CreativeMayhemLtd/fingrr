@@ -148,6 +148,9 @@ export default function Chat() {
         </TouchableOpacity>
         <Text style={styles.headerName} numberOfLines={1}>{name}</Text>
         <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.headerBtn} onPress={() => router.push(`/verify/${did}`)}>
+            <Text style={[styles.headerBtnText, contact?.verified && styles.verifiedShield]}>🛡</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.headerBtn} onPress={startCall}>
             <Text style={styles.headerBtnText}>📞</Text>
           </TouchableOpacity>
@@ -203,6 +206,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center',
   },
   headerBtnText: { fontSize: 18 },
+  verifiedShield: { textShadowColor: '#17a34a', textShadowRadius: 8 },
   messageList: { padding: 16, paddingBottom: 8 },
   bubble: { maxWidth: '80%', padding: 10, borderRadius: 16, marginBottom: 8 },
   mine: { backgroundColor: '#2563eb', alignSelf: 'flex-end', borderBottomRightRadius: 4 },

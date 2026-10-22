@@ -16,8 +16,9 @@ export interface Contact {
   displayName?: string;
   messagingDid: string;  // their did:key
   ikPub: Uint8Array;     // their X25519 identity key
-  sessionId: string;     // HKDF-derived pseudonym for signaling
+  sessionId: string;     // their inboxToken (routing pseudonym)
   addedAt: number;
+  verified?: boolean;    // user compared safety numbers out-of-band
 }
 
 export interface Message {

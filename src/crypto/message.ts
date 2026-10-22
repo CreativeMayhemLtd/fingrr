@@ -8,6 +8,7 @@ export const DOMAIN_MESSAGE = new TextEncoder().encode('lysn-msg/message/v1\x00'
 const DOMAIN_KEY_ATTESTATION = new TextEncoder().encode('lysn-msg/key-attestation/v1\x00');
 const DOMAIN_PREKEY_BUNDLE = new TextEncoder().encode('lysn-prekey-bundle/v1\x00');
 const DOMAIN_OTPK_BATCH = new TextEncoder().encode('fingrr-otpk-batch/v1\x00');
+const DOMAIN_SIGNAL = new TextEncoder().encode('fingrr-signal/v1\x00');
 
 // JSON canonicalization: sort keys, remove null/undefined fields
 export function canonicalJson(obj: Record<string, unknown>): Uint8Array {
@@ -191,6 +192,39 @@ export function verifyOtpkBatch(
     const pubKey = ed25519PubFromDidKey(did);
     const canonical = canonicalJson({ spkId, otpks: JSON.stringify(otpks) });
     return verify(pubKey, DOMAIN_OTPK_BATCH, canonical, sigStr);
+  } catch {
+    return false;
+  }
+}
+
+// WebRTC signaling bodies (offer/answer/ICE) are signed by the sender's
+// Ed25519 identity INSIDE the sealed payload. This authenticates the SDP —
+// and therefore the DTLS fingerprint within it, i.e. the call's media keys —
+// to the same identity root as messages. Without it, any contact could
+// impersonate another contact's routing token.
+export interface SignedSignalBody {
+  type: string;
+  from: string;     // sender's inboxToken (routing)
+  payload: string;
+  did: string;      // sender's messaging did:key — must match the contact owning `from`
+  iat: number;      // seconds; receivers enforce a freshness window
+  sig?: string;
+}
+
+export function signSignalBody(
+  edPrivateKey: Uint8Array,
+  body: Omit<SignedSignalBody, 'sig'>,
+): SignedSignalBody {
+  const sig = sign(edPrivateKey, DOMAIN_SIGNAL, canonicalJson(body as unknown as Record<string, unknown>));
+  return { ...body, sig };
+}
+
+export function verifySignalBody(body: SignedSignalBody): boolean {
+  if (!body.sig) return false;
+  try {
+    const { sig, ...unsigned } = body;
+    const pub = ed25519PubFromDidKey(body.did);
+    return verify(pub, DOMAIN_SIGNAL, canonicalJson(unsigned as unknown as Record<string, unknown>), sig);
   } catch {
     return false;
   }

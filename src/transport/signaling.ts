@@ -17,14 +17,25 @@
 //   carry IP addresses) is sealed to the recipient's X25519 IK before write.
 //   An observer sees: someone wrote an encrypted record to their own repo,
 //   addressed to a random token. No signal type, no sender token, no IPs.
+//
+// AUTHENTICITY:
+//   The sealed body is Ed25519-signed by the sender's messaging identity and
+//   carries their did:key + iat. On receive we verify the signature, enforce
+//   a freshness window, and resolve the sender by VERIFIED DID — the
+//   attacker-controllable token never drives contact matching. Because the
+//   SDP (and thus the DTLS fingerprint) is signed, call media keys chain up
+//   to the same identity root as messages.
 
 import { getAgent } from '@/services/agent';
 import { COLLECTION_SIGNAL } from '@/config';
 import { sealContent, openContent, wrapKey, unwrapKey, generateContentKey } from '@/crypto/encryption';
+import { signSignalBody, verifySignalBody, type SignedSignalBody } from '@/crypto/message';
 import { useContactsStore } from '@/store/contacts';
 import { useIdentityStore } from '@/store/identity';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { SignalingMessage } from '@/types';
+
+const SIGNAL_MAX_AGE_S = 300;
 
 type MessageHandler = (msg: SignalingMessage & { _rkey?: string }) => void;
 
@@ -61,10 +72,17 @@ export class ATProtoSignaling {
     const contact = useContactsStore.getState().contacts
       .find(c => c.sessionId === msg.to);
     if (!contact) throw new Error('unknown signaling recipient');
+    const { edPrivateKey, identity } = useIdentityStore.getState();
+    if (!edPrivateKey || !identity) throw new Error('identity not initialised');
 
-    const body = new TextEncoder().encode(
-      JSON.stringify({ type: msg.type, from: msg.from, payload: msg.payload })
-    );
+    const signed = signSignalBody(edPrivateKey, {
+      type: msg.type,
+      from: msg.from,
+      payload: msg.payload,
+      did: identity.messagingDid,
+      iat: Math.floor(Date.now() / 1000),
+    });
+    const body = new TextEncoder().encode(JSON.stringify(signed));
     const ck = generateContentKey();
     const ct = sealContent(body, ck);
     const wrapped = wrapKey(ck, contact.ikPub);
@@ -143,15 +161,31 @@ export class ATProtoSignaling {
         if (value.v !== 2 || !value.wrapped || !value.ct) continue;
         const ikPriv = useIdentityStore.getState().ikPriv;
         if (!ikPriv) continue;
-        let msg: SignalingMessage & { _rkey?: string };
+        let body: SignedSignalBody;
         try {
           const ck = unwrapKey(hexToBytes(value.wrapped), ikPriv);
-          const body = openContent(hexToBytes(value.ct), ck);
+          const pt = openContent(hexToBytes(value.ct), ck);
           ck.fill(0);
-          msg = JSON.parse(new TextDecoder().decode(body));
+          body = JSON.parse(new TextDecoder().decode(pt));
         } catch { continue; /* not sealed to us or tampered */ }
-        msg.to = this.myInboxToken;
-        msg._rkey = rkey;
+
+        // Authenticity gate: valid signature, fresh, and from a known contact.
+        if (!verifySignalBody(body)) continue;
+        if (Math.abs(Date.now() / 1000 - body.iat) > SIGNAL_MAX_AGE_S) continue;
+        const sender = useContactsStore.getState().contacts
+          .find(c => c.messagingDid === body.did);
+        if (!sender) continue;
+
+        // `from` is rewritten to the verified contact's stored token so the
+        // layers above always match by authenticated identity, never by an
+        // attacker-chosen token.
+        const msg: SignalingMessage & { _rkey?: string } = {
+          type: body.type as SignalingMessage['type'],
+          from: sender.sessionId,
+          to: this.myInboxToken,
+          payload: body.payload,
+          _rkey: rkey,
+        };
         this.handlers.forEach(h => h(msg));
       }
     } catch { /* network error — retry next poll */ }

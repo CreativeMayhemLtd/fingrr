@@ -76,9 +76,18 @@ Opting out of notifications removes this channel entirely.
 **Cannot**
 - Forge messages from anyone else (Ed25519 inner signatures —
   test-crypto/test-session).
-- Replay captured envelopes (test-session, test-ratchet).
+- Impersonate another contact in call signaling: signal bodies are
+  identity-signed and senders are resolved by verified DID, never by the
+  attacker-controllable routing token (test-session signal-body test).
+  The signed SDP carries the DTLS fingerprint, so call media keys chain
+  to the same identity root.
+- Replay captured envelopes (test-session, test-ratchet), or replay
+  signal bodies outside the freshness window *(window logic untested)*.
 - Exhaust the receiver via unbounded skipped-key storage (test-ratchet
   MAX_SKIP bound).
+
+Users can additionally compare **safety numbers** (shield icon in a chat)
+to rule out key-substitution by any party, including a malicious PDS.
 
 ## 7. Device compromise (lost/seized/rooted phone)
 
