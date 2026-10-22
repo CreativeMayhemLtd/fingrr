@@ -124,10 +124,25 @@ export default function Home() {
             <Text style={s.iconBtnText}>{themeIcon}</Text>
           </TouchableOpacity>
 
-          {/* Background picker */}
-          <TouchableOpacity style={[s.iconBtn, { backgroundColor: colors.pill }]} onPress={pickBackground} activeOpacity={0.7}>
+          {/* Background picker — long-press (or the ✕ that appears) removes it */}
+          <TouchableOpacity
+            style={[s.iconBtn, { backgroundColor: colors.pill }]}
+            onPress={pickBackground}
+            onLongPress={() => setBackgroundUri(null)}
+            activeOpacity={0.7}
+          >
             <Text style={s.iconBtnText}>🖼️</Text>
           </TouchableOpacity>
+          {bgUri && (
+            <TouchableOpacity
+              style={[s.iconBtn, { backgroundColor: colors.pill }]}
+              onPress={() => setBackgroundUri(null)}
+              activeOpacity={0.7}
+              accessibilityLabel="Remove background image"
+            >
+              <Text style={s.iconBtnText}>✕</Text>
+            </TouchableOpacity>
+          )}
 
           {/* User pill */}
           <TouchableOpacity
