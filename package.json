@@ -55,7 +55,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
-    "@babel/plugin-transform-class-static-block": "^8.0.5",
+    "@babel/plugin-transform-class-static-block": "^7.29.7",
     "@testing-library/react-native": "12.7.2",
     "@types/react": "~18.3.12",
     "babel-jest": "^29.7.0",
