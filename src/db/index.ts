@@ -4,17 +4,32 @@
 //   messages(id, conversation_did, sender_did, type, plaintext, sent_at, received_at, status)
 //   contacts(did, handle, display_name, messaging_did, ik_pub_hex, session_id, added_at)
 //
-// All crypto happens in the services layer. The DB stores plaintext cache only —
-// the on-wire ciphertext is never persisted locally (it lives on the ATProto PDS
-// for async delivery and is deleted after decryption).
+// On-wire ciphertext is never persisted locally (it lives on the ATProto PDS
+// for async delivery and is deleted after decryption). On native the whole DB
+// is SQLCipher-encrypted at rest with a key derived from the SecureStore
+// masterKey — a forensic image or unencrypted device backup yields ciphertext.
+// On web (dev-only build) SQLCipher is unavailable and the DB is plaintext.
 
 import * as SQLite from 'expo-sqlite';
+import { Platform } from 'react-native';
+import { getMasterKey, deriveKey } from '@/crypto/keys';
+import { bytesToHex } from '@noble/hashes/utils';
 
 let _db: SQLite.SQLiteDatabase | null = null;
 
 export async function getDB(): Promise<SQLite.SQLiteDatabase> {
   if (_db) return _db;
-  _db = await SQLite.openDatabaseAsync('fingrr.db');
+  if (Platform.OS === 'web') {
+    _db = await SQLite.openDatabaseAsync('fingrr.db');
+  } else {
+    const masterKey = await getMasterKey();
+    const dbKey = bytesToHex(deriveKey(masterKey, 'db-at-rest', 0));
+    _db = await SQLite.openDatabaseAsync('fingrr-enc.db');
+    // PRAGMA key must be the first statement on a SQLCipher database
+    await _db.execAsync(`PRAGMA key = "x'${dbKey}'";`);
+    // Remove the legacy plaintext DB so no cleartext history stays on disk
+    SQLite.deleteDatabaseAsync('fingrr.db').catch(() => {});
+  }
   await migrate(_db);
   return _db;
 }
