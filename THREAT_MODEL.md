@@ -86,8 +86,10 @@ Opting out of notifications removes this channel entirely.
 - Exhaust the receiver via unbounded skipped-key storage (test-ratchet
   MAX_SKIP bound).
 
-Users can additionally compare **safety numbers** (shield icon in a chat)
-to rule out key-substitution by any party, including a malicious PDS.
+Users can additionally compare **safety emoji** (shield icon in a chat; a
+12-symbol sequence identical on both devices, with the full 60-digit form
+behind a toggle) to rule out key-substitution by any party, including a
+malicious PDS.
 
 ## 7. Device compromise (lost/seized/rooted phone)
 

@@ -249,7 +249,7 @@ await test('signal body: valid signature verifies; impersonation rejected', asyn
 
 // ── Safety numbers ───────────────────────────────────────────────────────────
 
-const { safetyNumber } = await import('../src/crypto/safety.ts');
+const { safetyNumber, safetyEmoji } = await import('../src/crypto/safety.ts');
 
 await test('safety number: identical on both sides, distinct per pair, stable format', async () => {
   const didA = didKeyFromEd25519(ed25519.getPublicKey(ed25519.utils.randomPrivateKey()));
@@ -263,6 +263,13 @@ await test('safety number: identical on both sides, distinct per pair, stable fo
   assert(ab.join('') !== safetyNumber(didA, didC).join(''), 'collision across pairs');
   // deterministic
   assert(ab.join('') === safetyNumber(didA, didB).join(''), 'non-deterministic');
+
+  // Emoji representation: same symmetry/distinctness properties
+  const eAB = safetyEmoji(didA, didB);
+  assert(eAB.join('') === safetyEmoji(didB, didA).join(''), 'order-dependent emoji');
+  assert(eAB.length === 12, `expected 12 emoji, got ${eAB.length}`);
+  assert(eAB.join('') !== safetyEmoji(didA, didC).join(''), 'emoji collision across pairs');
+  assert(eAB.join('') === safetyEmoji(didA, didB).join(''), 'emoji non-deterministic');
 });
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed\n`);

@@ -60,7 +60,7 @@ Every signal body is Ed25519-signed by the sender's messaging identity inside th
 
 Once connected, messages flow over a DTLS-encrypted WebRTC data channel.
 
-**Voice/video calls**: media is DTLS-SRTP with ephemeral per-call keys, peer-to-peer. Because the SDP (which carries the DTLS certificate fingerprint) is identity-signed, call media keys chain up to the same identity root as messages. Contacts can additionally compare **safety numbers** (shield icon in any chat): both devices derive the same 60-digit number from the two identities — matching numbers rule out a key-substitution MITM.
+**Voice/video calls**: media is DTLS-SRTP with ephemeral per-call keys, peer-to-peer. Because the SDP (which carries the DTLS certificate fingerprint) is identity-signed, call media keys chain up to the same identity root as messages. Contacts can additionally compare **safety emoji** (shield icon in any chat): both devices derive the same 12-symbol emoji sequence from the two identities — matching symbols rule out a key-substitution MITM. The exact 60-digit number sits behind a "show as numbers" toggle.
 
 **IP addresses, plainly:**
 - On a direct connection, **peers see each other's IP**. That is inherent to P2P.
