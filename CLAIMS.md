@@ -13,7 +13,12 @@ Test suites (all run in CI on every push, `.github/workflows/ci.yml`):
 | X3DH + Double Ratchet | `scripts/test-ratchet.ts` | 16 |
 | Envelope v2 sessions + bundle verification | `scripts/test-session.ts` | 12 |
 | ATProto inbox flow (mock PDS) | `scripts/test-atproto-flow.mjs` | 9 |
-| Live PDS round trip | `scripts/test-live-atproto.mjs` (secrets-gated) | 6 |
+| Live PDS round trip, envelope v2 | `scripts/test-live-atproto.ts` (secrets-gated in CI) | 7 |
+
+The live suite drives the real app modules against a real PDS: app-schema
+keybundle publish + signature verification on read-back, X3DH from the fetched
+bundle, sealed v2 inbox record, wire-level metadata absence, decrypt, replay
+rejection, token filtering. Last run 2026-10-22 against bsky.social: **7/7**.
 
 ---
 
@@ -28,8 +33,8 @@ Test suites (all run in CI on every push, `.github/workflows/ci.yml`):
 | v2: one-time prekey consumed exactly once; reuse rejected | `session.ts` `openMessageV2` (reject on `takeOtpkPriv` null); `prekeys.ts` SQL `UPDATE … SET used=1, priv_hex=NULL` | test-session: "second init naming a used id is rejected" |
 | v2: replayed envelopes rejected | `session.ts` sid routing into existing ratchet; `ratchet.ts` single-use keys | test-session: "replayed envelope is rejected"; test-ratchet: 3 replay variants |
 | v2: headers tamper-protected | `ratchet.ts` header as GCM AAD | test-ratchet: "tampered header (AAD) is rejected" |
-| Sender identity sealed inside ciphertext | v1: `message.ts` `sealMessage` (from inside ct); v2: `session.ts` outer ECIES layer | test-atproto-flow: "sealed sender"; test-session: "sealed metadata"; test-live-atproto: plaintext absence check |
-| v2 wire exposes no recipient identity | `session.ts` `sealOuter` (`to: ''`) | test-session: "sealed metadata: envelope exposes no DIDs…" |
+| Sender identity sealed inside ciphertext | v1: `message.ts` `sealMessage` (from inside ct); v2: `session.ts` outer ECIES layer | test-atproto-flow: "sealed sender"; test-session: "sealed metadata"; test-live-atproto: wire check on a real stored record |
+| v2 wire exposes no recipient identity | `session.ts` `sealOuter` (`to: ''`) | test-session: "sealed metadata…"; test-live-atproto: "stored record leaks no DIDs, no plaintext, empty to" |
 | Messages signed; bad signatures rejected | `message.ts` inner Ed25519 over domain-separated canonical JSON; `session.ts` `verifyInner` | test-crypto: tampered/wrong-to; test-session round trips verify `from` |
 | 32KB body limit enforced | `message.ts:79`, `session.ts` `MAX_BODY` | test-crypto: "message over 32KB is rejected" |
 
@@ -57,8 +62,9 @@ Test suites (all run in CI on every push, `.github/workflows/ci.yml`):
 
 ## Untested claims (design intent, not verified)
 
-- **Signal payload sealing** — implemented in `signaling.ts`; no test asserts
-  a written signal record contains no SDP/IP plaintext.
+- **Signal payload sealing** — implemented in `signaling.ts`; the equivalent
+  sealing is live-tested for inbox records, but no test asserts a written
+  *signal* record contains no SDP/IP plaintext.
 - **Group record field stripping** — no test asserts the published record
   shape.
 - **Push relay rate limiting / memory cap** — no server test suite.

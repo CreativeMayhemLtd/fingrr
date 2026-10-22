@@ -131,7 +131,7 @@ fingrr/
 │   │   └── notifications.ts  # push relay client
 │   ├── db/                   # SQLCipher-encrypted SQLite
 │   └── store/                # Zustand state
-├── scripts/                  # test suites (44 tests, run in CI on every push)
+├── scripts/                  # test suites (46 in CI + 7 live-PDS, 53 total)
 └── server/                   # push relay-lite (Fastify, in-memory, rate-limited)
 ```
 
