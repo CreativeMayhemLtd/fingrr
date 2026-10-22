@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollVi
 import { BskyAgent } from '@atproto/api';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { getMasterKey, deriveEd25519Keypair, deriveX25519Keypair, didKeyFromEd25519 } from '@/crypto/keys';
-import { signPrekeyBundle } from '@/crypto/message';
+import { signPrekeyBundle, signOtpkBatch } from '@/crypto/message';
 import { publishKeybundle } from '@/identity/atproto';
 import { useIdentityStore } from '@/store/identity';
 import { router } from 'expo-router';
@@ -61,13 +61,26 @@ export default function Onboarding() {
       const { privateKey: spkPriv, publicKey: spkPub } = deriveX25519Keypair(masterKey, 'x25519-spk', 0);
 
       const ikHex = bytesToHex(ikPub);
-      const spkHex = bytesToHex(spkPub);
       const inboxToken = bytesToHex(randomBytes(16));
+
+      // Envelope v2 prekeys (random rotating SPK + one-time prekey batch)
+      let v2: { spkId: number; spkHex: string; otpks: Array<{ id: number; pub: string }>; otpksSig: string } | null = null;
+      try {
+        const { ensurePrekeys } = await import('@/services/prekeys');
+        const pk = await ensurePrekeys();
+        const otpks = pk.otpks.map(o => ({ id: o.id, pub: bytesToHex(o.pub) }));
+        v2 = { spkId: pk.spkId, spkHex: bytesToHex(pk.spkPub), otpks, otpksSig: signOtpkBatch(edPriv, pk.spkId, otpks) };
+      } catch (e: any) {
+        devLog.warn('onboarding', `prekey store unavailable, v1 bundle: ${e?.message ?? String(e)}`);
+      }
+
+      const spkHex = v2?.spkHex ?? bytesToHex(spkPub);
       const bundleSig = signPrekeyBundle(edPriv, messagingDid, ikHex, spkHex, inboxToken);
 
       devLog.info('onboarding', 'publishing keybundle…');
       await publishKeybundle(agent, atprotoDid, {
         did: messagingDid, identityKey: ikHex, signedPrekey: spkHex, sig: bundleSig, inboxToken,
+        ...(v2 ? { spkId: v2.spkId, otpks: v2.otpks, otpksSig: v2.otpksSig } : {}),
       });
       devLog.ok('onboarding', 'keybundle published');
 

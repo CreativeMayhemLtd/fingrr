@@ -7,6 +7,7 @@ import bs58 from 'bs58';
 export const DOMAIN_MESSAGE = new TextEncoder().encode('lysn-msg/message/v1\x00');
 const DOMAIN_KEY_ATTESTATION = new TextEncoder().encode('lysn-msg/key-attestation/v1\x00');
 const DOMAIN_PREKEY_BUNDLE = new TextEncoder().encode('lysn-prekey-bundle/v1\x00');
+const DOMAIN_OTPK_BATCH = new TextEncoder().encode('fingrr-otpk-batch/v1\x00');
 
 // JSON canonicalization: sort keys, remove null/undefined fields
 export function canonicalJson(obj: Record<string, unknown>): Uint8Array {
@@ -167,6 +168,32 @@ export function signPrekeyBundle(
   if (inboxToken) bundle.inboxToken = inboxToken;
   const canonical = canonicalJson(bundle);
   return sign(edPrivateKey, DOMAIN_PREKEY_BUNDLE, canonical);
+}
+
+// Sign the one-time-prekey batch (and the spkId it belongs with) for
+// publication alongside the prekey bundle. Re-signed on every replenish.
+export function signOtpkBatch(
+  edPrivateKey: Uint8Array,
+  spkId: number,
+  otpks: Array<{ id: number; pub: string }>,
+): string {
+  const canonical = canonicalJson({ spkId, otpks: JSON.stringify(otpks) });
+  return sign(edPrivateKey, DOMAIN_OTPK_BATCH, canonical);
+}
+
+export function verifyOtpkBatch(
+  did: string,
+  spkId: number,
+  otpks: Array<{ id: number; pub: string }>,
+  sigStr: string,
+): boolean {
+  try {
+    const pubKey = ed25519PubFromDidKey(did);
+    const canonical = canonicalJson({ spkId, otpks: JSON.stringify(otpks) });
+    return verify(pubKey, DOMAIN_OTPK_BATCH, canonical, sigStr);
+  } catch {
+    return false;
+  }
 }
 
 // Verify a published prekey bundle's Ed25519 signature.

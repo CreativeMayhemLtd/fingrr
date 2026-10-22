@@ -96,6 +96,31 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
       status      TEXT NOT NULL DEFAULT 'sent'
     );
     CREATE INDEX IF NOT EXISTS idx_gmsg ON group_messages(group_id, sent_at DESC);
+
+    -- Envelope v2: Double Ratchet session state (one row per peer)
+    CREATE TABLE IF NOT EXISTS dr_sessions (
+      peer_did   TEXT PRIMARY KEY,
+      sid        TEXT NOT NULL UNIQUE,
+      wrapper    TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_dr_sid ON dr_sessions(sid);
+
+    -- Signed prekeys: random, rotated; retired keys kept for a grace window
+    CREATE TABLE IF NOT EXISTS spk_keys (
+      id         INTEGER PRIMARY KEY,
+      priv_hex   TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      retired_at INTEGER
+    );
+
+    -- One-time prekeys: priv_hex is erased (NULL) when consumed
+    CREATE TABLE IF NOT EXISTS otpk_keys (
+      id         INTEGER PRIMARY KEY,
+      priv_hex   TEXT,
+      used       INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
   `);
 }
 

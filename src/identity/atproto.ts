@@ -6,10 +6,13 @@ const KEYBUNDLE_COLLECTION = 'fm.lysn.keybundle';
 export interface PrekeyBundle {
   did: string;
   identityKey: string;
-  signedPrekey: string;
+  signedPrekey: string;  // current SPK public key, hex
   sig: string;
-  inboxToken: string;    // relay routing address — fresh random each session
-  oneTimePrekey?: string;
+  inboxToken: string;    // routing address — fresh random each session
+  // Envelope v2 (X3DH + Double Ratchet) fields:
+  spkId?: number;
+  otpks?: Array<{ id: number; pub: string }>;
+  otpksSig?: string;     // Ed25519 over { spkId, otpks }, domain-separated
   pqAlg?: number;
   pqSignedPrekey?: string;
 }

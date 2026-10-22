@@ -13,7 +13,7 @@
 import { COLLECTION_INBOX, COLLECTION_KEYBUNDLE } from '@/config';
 import { getAgent } from '@/services/agent';
 import { markInboxSeen, isInboxSeen } from '@/db';
-import { verifyPrekeyBundle } from '@/crypto/message';
+import { verifyPrekeyBundle, verifyOtpkBatch } from '@/crypto/message';
 import { hexToBytes } from '@noble/hashes/utils';
 import type { LysnEnvelope } from '@/crypto/message';
 import { handleIncomingEnvelope } from '@/services/messaging';
@@ -27,6 +27,13 @@ export interface CurrentKeys {
   inboxToken: string;
   ikPub: Uint8Array;
   messagingDid: string;
+  // Envelope v2 capability (present when the peer publishes verified
+  // X3DH prekeys — spkId + one-time prekey batch):
+  v2?: {
+    spkPub: Uint8Array;
+    spkId: number;
+    otpks: Array<{ id: number; pub: Uint8Array }>;
+  };
 }
 
 // Fetch the contact's CURRENT keys from their published keybundle: the stored
@@ -42,15 +49,34 @@ export async function fetchCurrentKeys(contactDid: string): Promise<CurrentKeys 
     const json = await res.json();
     const record = json.value as {
       atprotoDid?: string;
-      prekey?: { did: string; identityKey: string; signedPrekey: string; sig?: string; inboxToken?: string };
+      prekey?: {
+        did: string; identityKey: string; signedPrekey: string; sig?: string; inboxToken?: string;
+        spkId?: number; otpks?: Array<{ id: number; pub: string }>; otpksSig?: string;
+      };
     } | undefined;
     if (record?.atprotoDid !== contactDid) return null;
     const prekey = record.prekey;
     if (!prekey?.inboxToken || !verifyPrekeyBundle(prekey)) return null;
+
+    // v2 capability only counts when the OTPK batch signature verifies —
+    // a PDS cannot inject its own prekeys or strip/replace the batch.
+    let v2: CurrentKeys['v2'];
+    if (
+      prekey.spkId != null && prekey.otpks && prekey.otpksSig &&
+      verifyOtpkBatch(prekey.did, prekey.spkId, prekey.otpks, prekey.otpksSig)
+    ) {
+      v2 = {
+        spkPub: hexToBytes(prekey.signedPrekey),
+        spkId: prekey.spkId,
+        otpks: prekey.otpks.map(o => ({ id: o.id, pub: hexToBytes(o.pub) })),
+      };
+    }
+
     return {
       inboxToken: prekey.inboxToken,
       ikPub: hexToBytes(prekey.identityKey),
       messagingDid: prekey.did,
+      ...(v2 ? { v2 } : {}),
     };
   } catch {
     return null;
