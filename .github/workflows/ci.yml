@@ -47,4 +47,4 @@ jobs:
             echo "No live-test credentials configured — skipping."
             exit 0
           fi
-          node scripts/test-live-atproto.mjs
+          node --experimental-strip-types scripts/test-live-atproto.ts

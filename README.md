@@ -158,7 +158,7 @@ node scripts/test-crypto.mjs                                  # v1 envelope (9)
 node --experimental-strip-types scripts/test-ratchet.ts      # X3DH + DR (16)
 node --experimental-strip-types scripts/test-session.ts      # envelope v2 (10)
 node scripts/test-atproto-flow.mjs                           # mock-PDS flow (9)
-BSKY_HANDLE=… BSKY_APP_PASSWORD=… node scripts/test-live-atproto.mjs  # live PDS (6)
+BSKY_HANDLE=… BSKY_APP_PASSWORD=… node --experimental-strip-types scripts/test-live-atproto.ts  # live PDS, v2 (7)
 ```
 
 Push relay (optional, self-hostable):
