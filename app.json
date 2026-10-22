@@ -8,7 +8,11 @@
     },
     "orientation": "portrait",
     "scheme": "fingrr",
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
@@ -25,7 +29,11 @@
         "NSCameraUsageDescription": "fingrr uses the camera for video calls.",
         "NSMicrophoneUsageDescription": "fingrr uses the microphone for voice and video calls.",
         "NSPhotoLibraryUsageDescription": "fingrr accesses your photo library to share images.",
-        "UIBackgroundModes": ["voip", "fetch", "remote-notification"],
+        "UIBackgroundModes": [
+          "voip",
+          "fetch",
+          "remote-notification"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -43,7 +51,8 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
         "android.permission.USE_FULL_SCREEN_INTENT"
-      ]
+      ],
+      "versionCode": 3
     },
     "web": {
       "bundler": "metro"
@@ -90,6 +99,7 @@
         "projectId": "4d10b19d-073d-4cef-81cb-2c224e1418d4"
       }
     },
-    "owner": "neitzert"
+    "owner": "neitzert",
+    "privacyPolicyUrl": "https://github.com/CreativeMayhemLtd/fingrr/blob/main/PRIVACY.md"
   }
 }
