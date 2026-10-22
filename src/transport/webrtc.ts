@@ -3,15 +3,28 @@
 // Used by app/call/[did].tsx for audio/video calls.
 // For text-only P2P, see src/services/webrtc.ts.
 
-import {
-  RTCPeerConnection,
-  RTCIceCandidate,
-  RTCSessionDescription,
-} from 'react-native-webrtc';
+import { Platform } from 'react-native';
 import { ICE_SERVERS } from '@/config';
 import { classifyConnection, type ConnectionType } from '@/transport/icetype';
 
-export { mediaDevices } from 'react-native-webrtc';
+// Browsers ship WebRTC natively; react-native-webrtc crashes at import on
+// web. Bind the right implementation per platform.
+/* eslint-disable @typescript-eslint/no-explicit-any */
+let RTCPeerConnection: any, RTCIceCandidate: any, RTCSessionDescription: any, mediaDevices: any;
+if (Platform.OS === 'web') {
+  RTCPeerConnection = (globalThis as any).RTCPeerConnection;
+  RTCIceCandidate = (globalThis as any).RTCIceCandidate;
+  RTCSessionDescription = (globalThis as any).RTCSessionDescription;
+  mediaDevices = (globalThis as any).navigator?.mediaDevices;
+} else {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const rn = require('react-native-webrtc');
+  RTCPeerConnection = rn.RTCPeerConnection;
+  RTCIceCandidate = rn.RTCIceCandidate;
+  RTCSessionDescription = rn.RTCSessionDescription;
+  mediaDevices = rn.mediaDevices;
+}
+export { mediaDevices, RTCPeerConnection, RTCIceCandidate, RTCSessionDescription };
 
 interface ISignaling {
   send(msg: { type: string; from: string; to: string; payload: string }): unknown;
@@ -21,7 +34,7 @@ interface ISignaling {
 const RTC_CONFIG = { iceServers: ICE_SERVERS };
 
 export class CallPeerConnection {
-  private pc: InstanceType<typeof RTCPeerConnection>;
+  private pc: any;
   private onDataChannel?: (dc: unknown) => void;
   private onStream?: (stream: unknown) => void;
   private unsubs: Array<() => void> = [];

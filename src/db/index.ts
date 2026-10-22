@@ -10,15 +10,19 @@
 // masterKey — a forensic image or unencrypted device backup yields ciphertext.
 // On web (dev-only build) SQLCipher is unavailable and the DB is plaintext.
 
-import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
 import { getMasterKey, deriveKey } from '@/crypto/keys';
 import { bytesToHex } from '@noble/hashes/utils';
+import type * as SQLiteTypes from 'expo-sqlite';
 
-let _db: SQLite.SQLiteDatabase | null = null;
+let _db: SQLiteTypes.SQLiteDatabase | null = null;
 
-export async function getDB(): Promise<SQLite.SQLiteDatabase> {
+export async function getDB(): Promise<SQLiteTypes.SQLiteDatabase> {
   if (_db) return _db;
+  // Lazy import: a static import crashes the web bundle at boot (no native
+  // ExpoSQLite module there). On web this throws at call time instead, and
+  // every caller already handles DB failures.
+  const SQLite = await import('expo-sqlite');
   if (Platform.OS === 'web') {
     _db = await SQLite.openDatabaseAsync('fingrr.db');
   } else {
@@ -34,7 +38,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
   return _db;
 }
 
-async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
+async function migrate(db: SQLiteTypes.SQLiteDatabase): Promise<void> {
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
 

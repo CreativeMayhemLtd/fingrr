@@ -9,11 +9,7 @@
 //   Once connected, all traffic is direct P2P (STUN drops out).
 //   Data channel carries Lysn-sealed envelopes (ciphertext only).
 
-import {
-  RTCPeerConnection,
-  RTCIceCandidate,
-  RTCSessionDescription,
-} from 'react-native-webrtc';
+import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, mediaDevices } from '@/transport/webrtc';
 import { ICE_SERVERS } from '@/config';
 import { classifyConnection, type ConnectionType } from '@/transport/icetype';
 import type { ATProtoSignaling } from '@/transport/signaling';
@@ -23,7 +19,7 @@ type EnvelopeHandler = (env: LysnEnvelope) => void;
 type StreamHandler = (stream: unknown) => void;
 
 export class PeerConnection {
-  private pc: InstanceType<typeof RTCPeerConnection>;
+  private pc: any;
   private dc: unknown = null;
   private envelopeHandlers = new Set<EnvelopeHandler>();
   private streamHandlers = new Set<StreamHandler>();
@@ -87,7 +83,7 @@ export class PeerConnection {
     // Media if requested
     if (hasVideo || true /* always request audio at minimum */) {
       try {
-        const { mediaDevices } = await import('react-native-webrtc');
+        
         const stream = await (mediaDevices as any).getUserMedia({ audio: true, video: hasVideo });
         (stream as any).getTracks().forEach((t: any) => (this.pc as any).addTrack(t, stream));
         this.streamHandlers.forEach(h => h(stream));
@@ -113,7 +109,7 @@ export class PeerConnection {
     // Media if requested
     if (hasVideo || true) {
       try {
-        const { mediaDevices } = await import('react-native-webrtc');
+        
         const stream = await (mediaDevices as any).getUserMedia({ audio: true, video: hasVideo });
         (stream as any).getTracks().forEach((t: any) => (this.pc as any).addTrack(t, stream));
         this.streamHandlers.forEach(h => h(stream));
