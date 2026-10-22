@@ -225,7 +225,7 @@ All cryptographic primitives are from the [`@noble`](https://paulmillr.com/noble
 
 ## Lysn compatibility
 
-The envelope format (`fm.lysn.keybundle`, `LysnEnvelope v1`, domain-separated signatures) is designed to be wire-compatible with the [Lysn2 messaging protocol](https://lysn.app). A fingrr user and a Lysn2 client can exchange messages without modification, provided both have fetched each other's keybundle.
+The envelope format (`fm.lysn.keybundle`, `LysnEnvelope v1`, domain-separated signatures) is designed to be wire-compatible with the [Lysn2 messaging protocol](https://lysn.fm). A fingrr user and a Lysn2 client can exchange messages without modification, provided both have fetched each other's keybundle.
 
 ---
 

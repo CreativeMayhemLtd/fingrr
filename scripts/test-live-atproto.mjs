@@ -97,8 +97,9 @@ function openMessage(env, myPriv, myDid) {
 
 // ── ATProto session ───────────────────────────────────────────────────────────
 
-const HANDLE = process.env.BSKY_HANDLE || 'neitzert.bsky.social';
+const HANDLE = process.env.BSKY_HANDLE;
 const APP_PASSWORD = process.env.BSKY_APP_PASSWORD;
+if (!HANDLE) { console.error('Set BSKY_HANDLE (e.g. yourhandle.bsky.social)'); process.exit(1); }
 if (!APP_PASSWORD) { console.error('Set BSKY_APP_PASSWORD'); process.exit(1); }
 
 const PDS = 'https://bsky.social';
