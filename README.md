@@ -1,6 +1,6 @@
 # fingrr
 
-**End-to-end encrypted messaging on the AT Protocol. Blind signaling via your own PDS, direct WebRTC transport, optional blind push relay. Apache 2.0.**
+**End-to-end encrypted messaging on the AT Protocol. Blind signaling via your own PDS, direct WebRTC transport, optional blind push relay.**
 
 fingrr lets Bluesky users exchange encrypted messages without trusting any server with their content. Identity is your existing Bluesky account. Keys are derived from a secret that never leaves your device. Signaling and offline delivery ride encrypted records on your own ATProto repo; live messages travel over direct WebRTC data channels.
 
