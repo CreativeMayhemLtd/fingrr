@@ -20,23 +20,36 @@ export async function sendTextMessage(contact: Contact, body: string): Promise<v
   if (!identity || !edPrivateKey) throw new Error('not initialized');
 
   const iat = Math.floor(Date.now() / 1000);
-  const env = sealMessage(
-    edPrivateKey,
-    identity.messagingDid,
-    contact.messagingDid,
-    contact.ikPub,
-    body,
-    iat,
-  );
-
   const peer = getActivePeer();
+
+  let env: LysnEnvelope;
   if (peer?.dataChannelOpen()) {
+    // Live channel: the handshake already used the contact's current keys.
+    env = sealMessage(
+      edPrivateKey,
+      identity.messagingDid,
+      contact.messagingDid,
+      contact.ikPub,
+      body,
+      iat,
+    );
     peer.sendEnvelope(env);
   } else {
-    // Offline: post to recipient's inbox on our PDS — they poll on reconnect.
-    // Pass contact.did so writeInboxRecord can fetch the current inboxToken.
-    const { writeInboxRecord } = await import('@/services/inbox');
-    await writeInboxRecord(contact.did, env);
+    // Offline: seal with the recipient's CURRENT keybundle keys, not cached
+    // ones — otherwise after their key rotation the record routes correctly
+    // but silently fails to decrypt. Falls back to cached keys if the fetch
+    // fails (better a maybe-stale envelope than a dropped message).
+    const { fetchCurrentKeys, writeInboxRecord } = await import('@/services/inbox');
+    const fresh = await fetchCurrentKeys(contact.did);
+    env = sealMessage(
+      edPrivateKey,
+      identity.messagingDid,
+      fresh?.messagingDid ?? contact.messagingDid,
+      fresh?.ikPub ?? contact.ikPub,
+      body,
+      iat,
+    );
+    await writeInboxRecord(contact.did, env, fresh?.inboxToken);
   }
 
   const msgId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
