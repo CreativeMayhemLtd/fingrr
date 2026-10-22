@@ -1,14 +1,18 @@
 import { Agent as BskyAgent } from '@atproto/api';
+import { verifyPrekeyBundle } from '@/crypto/message';
 
 const KEYBUNDLE_COLLECTION = 'fm.lysn.keybundle';
 
 export interface PrekeyBundle {
   did: string;
   identityKey: string;
-  signedPrekey: string;
+  signedPrekey: string;  // current SPK public key, hex
   sig: string;
-  inboxToken: string;    // relay routing address — fresh random each session
-  oneTimePrekey?: string;
+  inboxToken: string;    // routing address — fresh random each session
+  // Envelope v2 (X3DH + Double Ratchet) fields:
+  spkId?: number;
+  otpks?: Array<{ id: number; pub: string }>;
+  otpksSig?: string;     // Ed25519 over { spkId, otpks }, domain-separated
   pqAlg?: number;
   pqSignedPrekey?: string;
 }
@@ -52,6 +56,9 @@ export async function fetchKeybundle(
     const record = res.data.value as KeybundleRecord;
     // Binding check: the bundle must belong to the repo we read it from
     if (record.atprotoDid !== did) return null;
+    // Signature check: the X25519 keys must be signed by the bundle's own
+    // Ed25519 identity — a compromised PDS cannot substitute its own keys
+    if (!verifyPrekeyBundle(record.prekey)) return null;
     return record;
   } catch {
     return null;

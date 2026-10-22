@@ -25,6 +25,7 @@ export default function CallScreen() {
   const inboxToken = useIdentityStore(s => s.inboxToken);
 
   const [callState, setCallState] = useState<CallState>('initialising');
+  const [connType, setConnType] = useState<string>('');
   const [muted, setMuted] = useState(false);
   const [videoOn, setVideoOn] = useState(false);
   const [localStream, setLocalStream] = useState<any>(null);
@@ -72,6 +73,8 @@ export default function CallScreen() {
           if (!cancelled) {
             setRemoteStream(s);
             setCallState('connected');
+            // Tell the user whether this call is direct or TURN-relayed
+            pc.connectionType().then(t => { if (!cancelled) setConnType(t); });
           }
         });
 
@@ -153,7 +156,10 @@ export default function CallScreen() {
         <Text style={styles.statusText}>
           {callState === 'initialising' ? 'Starting…'
            : callState === 'calling' ? 'Calling…'
-           : callState === 'connected' ? 'Connected'
+           : callState === 'connected' ? (
+               connType === 'turn-relay' ? 'Connected via TURN relay'
+               : connType === 'direct-srflx' || connType === 'direct-host' ? 'Connected · direct P2P'
+               : 'Connected')
            : callState === 'ended' ? 'Call ended'
            : callState === 'error' ? `Error: ${errorMsg}`
            : ''}

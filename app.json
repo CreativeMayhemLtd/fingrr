@@ -60,6 +60,12 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true
+        }
+      ],
       "expo-asset",
       "expo-font",
       [

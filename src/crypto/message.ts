@@ -1,15 +1,16 @@
 import { ed25519 } from '@noble/curves/ed25519';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import { sealContent, openContent, wrapKey, unwrapKey, generateContentKey } from './encryption';
-import { ed25519PubFromDidKey } from './keys';
+import { sealContent, openContent, wrapKey, unwrapKey, generateContentKey } from './encryption.ts';
+import { ed25519PubFromDidKey } from './didkey.ts';
 import bs58 from 'bs58';
 
-const DOMAIN_MESSAGE = new TextEncoder().encode('lysn-msg/message/v1\x00');
+export const DOMAIN_MESSAGE = new TextEncoder().encode('lysn-msg/message/v1\x00');
 const DOMAIN_KEY_ATTESTATION = new TextEncoder().encode('lysn-msg/key-attestation/v1\x00');
 const DOMAIN_PREKEY_BUNDLE = new TextEncoder().encode('lysn-prekey-bundle/v1\x00');
+const DOMAIN_OTPK_BATCH = new TextEncoder().encode('fingrr-otpk-batch/v1\x00');
 
 // JSON canonicalization: sort keys, remove null/undefined fields
-function canonicalJson(obj: Record<string, unknown>): Uint8Array {
+export function canonicalJson(obj: Record<string, unknown>): Uint8Array {
   const sorted: Record<string, unknown> = {};
   Object.keys(obj).sort().forEach(k => {
     if (obj[k] != null) sorted[k] = obj[k];
@@ -26,7 +27,7 @@ function sigFromStr(s: string): Uint8Array {
 }
 
 // Sign bytes with Ed25519 private key, domain-separated
-function sign(privateKey: Uint8Array, domain: Uint8Array, payload: Uint8Array): string {
+export function sign(privateKey: Uint8Array, domain: Uint8Array, payload: Uint8Array): string {
   const msg = new Uint8Array(domain.length + payload.length);
   msg.set(domain, 0);
   msg.set(payload, domain.length);
@@ -34,7 +35,7 @@ function sign(privateKey: Uint8Array, domain: Uint8Array, payload: Uint8Array): 
 }
 
 // Verify Ed25519 signature
-function verify(publicKeyBytes: Uint8Array, domain: Uint8Array, payload: Uint8Array, sigStr: string): boolean {
+export function verify(publicKeyBytes: Uint8Array, domain: Uint8Array, payload: Uint8Array, sigStr: string): boolean {
   try {
     const sig = sigFromStr(sigStr);
     const msg = new Uint8Array(domain.length + payload.length);
@@ -167,6 +168,32 @@ export function signPrekeyBundle(
   if (inboxToken) bundle.inboxToken = inboxToken;
   const canonical = canonicalJson(bundle);
   return sign(edPrivateKey, DOMAIN_PREKEY_BUNDLE, canonical);
+}
+
+// Sign the one-time-prekey batch (and the spkId it belongs with) for
+// publication alongside the prekey bundle. Re-signed on every replenish.
+export function signOtpkBatch(
+  edPrivateKey: Uint8Array,
+  spkId: number,
+  otpks: Array<{ id: number; pub: string }>,
+): string {
+  const canonical = canonicalJson({ spkId, otpks: JSON.stringify(otpks) });
+  return sign(edPrivateKey, DOMAIN_OTPK_BATCH, canonical);
+}
+
+export function verifyOtpkBatch(
+  did: string,
+  spkId: number,
+  otpks: Array<{ id: number; pub: string }>,
+  sigStr: string,
+): boolean {
+  try {
+    const pubKey = ed25519PubFromDidKey(did);
+    const canonical = canonicalJson({ spkId, otpks: JSON.stringify(otpks) });
+    return verify(pubKey, DOMAIN_OTPK_BATCH, canonical, sigStr);
+  } catch {
+    return false;
+  }
 }
 
 // Verify a published prekey bundle's Ed25519 signature.

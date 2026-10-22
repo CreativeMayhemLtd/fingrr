@@ -14,7 +14,8 @@ import {
   RTCIceCandidate,
   RTCSessionDescription,
 } from 'react-native-webrtc';
-import { STUN_SERVERS } from '@/config';
+import { ICE_SERVERS } from '@/config';
+import { classifyConnection, type ConnectionType } from '@/transport/icetype';
 import type { ATProtoSignaling } from '@/transport/signaling';
 import type { LysnEnvelope } from '@/crypto/message';
 
@@ -32,7 +33,7 @@ export class PeerConnection {
   private unsubs: Array<() => void> = [];
 
   constructor() {
-    this.pc = new RTCPeerConnection({ iceServers: STUN_SERVERS } as any);
+    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS } as any);
     (this.pc as any).ondatachannel = (ev: any) => {
       this._wireDataChannel(ev.channel);
     };
@@ -133,6 +134,11 @@ export class PeerConnection {
 
   dataChannelOpen(): boolean {
     return (this.dc as any)?.readyState === 'open';
+  }
+
+  // How this connection actually runs: direct (host/srflx) or TURN-relayed.
+  async connectionType(): Promise<ConnectionType> {
+    return classifyConnection(this.pc as any);
   }
 
   sendEnvelope(env: LysnEnvelope): void {

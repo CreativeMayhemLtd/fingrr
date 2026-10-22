@@ -4,7 +4,6 @@ import { x25519 } from '@noble/curves/ed25519';
 import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
-import bs58 from 'bs58';
 
 const MASTER_KEY_STORAGE_KEY = 'fingrr.masterKey.v1';
 
@@ -41,27 +40,4 @@ export function deriveX25519Keypair(masterKey: Uint8Array, purpose: string, inde
   return { privateKey, publicKey };
 }
 
-// Build a did:key from an Ed25519 public key
-// did:key:z + base58btc([0xed, 0x01, ...pubkey])
-export function didKeyFromEd25519(pubkey: Uint8Array): string {
-  const prefixed = new Uint8Array(2 + pubkey.length);
-  prefixed[0] = 0xed;
-  prefixed[1] = 0x01;
-  prefixed.set(pubkey, 2);
-  return 'did:key:z' + bs58.encode(prefixed);
-}
-
-// Parse an Ed25519 did:key back to raw pubkey bytes
-export function ed25519PubFromDidKey(did: string): Uint8Array {
-  if (!did.startsWith('did:key:z')) throw new Error('not an ed25519 did:key');
-  const decoded = bs58.decode(did.slice('did:key:z'.length));
-  if (decoded[0] !== 0xed || decoded[1] !== 0x01) throw new Error('not an ed25519 key');
-  return decoded.slice(2);
-}
-
-// Derive pseudonymous session ID for signaling (never reveals real DID)
-export function deriveSessionId(masterKey: Uint8Array, contactDid: string): string {
-  const info = new TextEncoder().encode(`fingrr:session-id:${contactDid}`);
-  const derived = hkdf(sha256, masterKey, undefined, info, 16);
-  return bytesToHex(derived);
-}
+export { didKeyFromEd25519, ed25519PubFromDidKey } from './didkey';

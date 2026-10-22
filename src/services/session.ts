@@ -10,16 +10,6 @@
 //   - Signal records: deleted immediately after WebRTC connects.
 //     No persistent record of who called whom.
 
-import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex } from '@noble/hashes/utils';
-
-// Legacy fallback: derive a stable addressing token from a DID.
-// Used only for contacts whose keybundles predate inboxToken (v1 bundles).
-export function relaySessionId(messagingDid: string): string {
-  const h = sha256(new TextEncoder().encode(messagingDid + 'fingrr-relay-v1'));
-  return bytesToHex(h.slice(0, 16));
-}
-
 // Typed loosely to avoid circular imports. Callers that need the full type
 // import directly from @/services/webrtc or @/transport/signaling.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

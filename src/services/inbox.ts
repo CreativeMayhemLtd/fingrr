@@ -13,6 +13,8 @@
 import { COLLECTION_INBOX, COLLECTION_KEYBUNDLE } from '@/config';
 import { getAgent } from '@/services/agent';
 import { markInboxSeen, isInboxSeen } from '@/db';
+import { verifyPrekeyBundle, verifyOtpkBatch } from '@/crypto/message';
+import { hexToBytes } from '@noble/hashes/utils';
 import type { LysnEnvelope } from '@/crypto/message';
 import { handleIncomingEnvelope } from '@/services/messaging';
 import { useIdentityStore } from '@/store/identity';
@@ -21,16 +23,61 @@ import { pingRelay } from '@/services/notifications';
 
 const PUBLIC_API = 'https://public.api.bsky.app/xrpc';
 
-// Bug 2 fix: fetch the contact's current inboxToken from their keybundle.
-// The stored contact.sessionId may be stale if they re-logged-in.
-async function fetchCurrentInboxToken(contactDid: string): Promise<string | null> {
+export interface CurrentKeys {
+  inboxToken: string;
+  ikPub: Uint8Array;
+  messagingDid: string;
+  // Envelope v2 capability (present when the peer publishes verified
+  // X3DH prekeys — spkId + one-time prekey batch):
+  v2?: {
+    spkPub: Uint8Array;
+    spkId: number;
+    otpks: Array<{ id: number; pub: Uint8Array }>;
+  };
+}
+
+// Fetch the contact's CURRENT keys from their published keybundle: the stored
+// contact may be stale if they re-logged-in (new inboxToken) or rotated keys.
+// The bundle's Ed25519 signature is verified — an unsigned or tampered bundle
+// is rejected rather than silently used.
+export async function fetchCurrentKeys(contactDid: string): Promise<CurrentKeys | null> {
   try {
     const url = `${PUBLIC_API}/com.atproto.repo.getRecord` +
       `?repo=${encodeURIComponent(contactDid)}&collection=${encodeURIComponent(COLLECTION_KEYBUNDLE)}&rkey=self`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const json = await res.json();
-    return (json.value?.inboxToken as string) ?? null;
+    const record = json.value as {
+      atprotoDid?: string;
+      prekey?: {
+        did: string; identityKey: string; signedPrekey: string; sig?: string; inboxToken?: string;
+        spkId?: number; otpks?: Array<{ id: number; pub: string }>; otpksSig?: string;
+      };
+    } | undefined;
+    if (record?.atprotoDid !== contactDid) return null;
+    const prekey = record.prekey;
+    if (!prekey?.inboxToken || !verifyPrekeyBundle(prekey)) return null;
+
+    // v2 capability only counts when the OTPK batch signature verifies —
+    // a PDS cannot inject its own prekeys or strip/replace the batch.
+    let v2: CurrentKeys['v2'];
+    if (
+      prekey.spkId != null && prekey.otpks && prekey.otpksSig &&
+      verifyOtpkBatch(prekey.did, prekey.spkId, prekey.otpks, prekey.otpksSig)
+    ) {
+      v2 = {
+        spkPub: hexToBytes(prekey.signedPrekey),
+        spkId: prekey.spkId,
+        otpks: prekey.otpks.map(o => ({ id: o.id, pub: hexToBytes(o.pub) })),
+      };
+    }
+
+    return {
+      inboxToken: prekey.inboxToken,
+      ikPub: hexToBytes(prekey.identityKey),
+      messagingDid: prekey.did,
+      ...(v2 ? { v2 } : {}),
+    };
   } catch {
     return null;
   }
@@ -41,13 +88,14 @@ async function fetchCurrentInboxToken(contactDid: string): Promise<string | null
 export async function writeInboxRecord(
   recipientDid: string,
   envelope: LysnEnvelope,
+  // Pass when the caller already fetched the recipient's current token
+  // (avoids a second keybundle fetch).
+  tokenHint?: string,
 ): Promise<void> {
   const agent = getAgent();
   if (!agent) throw new Error('no ATProto agent');
 
-  // Bug 2 fix: always fetch the current inboxToken from the recipient's
-  // keybundle rather than using a potentially stale stored sessionId.
-  const currentToken = await fetchCurrentInboxToken(recipientDid);
+  const currentToken = tokenHint ?? (await fetchCurrentKeys(recipientDid))?.inboxToken;
   const contacts = useContactsStore.getState().contacts;
   const contact = contacts.find(c => c.did === recipientDid);
   const recipientSessionId = currentToken ?? contact?.sessionId ?? recipientDid;

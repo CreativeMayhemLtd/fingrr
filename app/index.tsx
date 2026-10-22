@@ -6,7 +6,7 @@ import { setAgent } from '@/services/agent';
 import type { OAuthSession } from '@atproto/oauth-client-browser';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { getMasterKey, deriveEd25519Keypair, deriveX25519Keypair, didKeyFromEd25519 } from '@/crypto/keys';
-import { signPrekeyBundle } from '@/crypto/message';
+import { signPrekeyBundle, signOtpkBatch } from '@/crypto/message';
 import { publishKeybundle } from '@/identity/atproto';
 import { useIdentityStore } from '@/store/identity';
 import { devLog } from '@/debug/log';
@@ -80,19 +80,38 @@ async function setupFromSession(session: OAuthSession, agent: Agent) {
   const { privateKey: spkPriv, publicKey: spkPub } = deriveX25519Keypair(masterKey, 'x25519-spk', 0);
 
   const ikHex = bytesToHex(ikPub);
-  const spkHex = bytesToHex(spkPub);
 
   // Fresh random inbox token every session — relay address is never derivable
   // from any public identity data, so observers can't link sessions to DIDs.
   const inboxToken = bytesToHex(randomBytes(16));
   devLog.info('setup', `inboxToken = ${inboxToken.slice(0, 8)}…`);
 
+  // Envelope v2: random rotating SPK + one-time prekey batch from the
+  // encrypted DB. Falls back to the legacy derived SPK (v1-only bundle) if
+  // the prekey store is unavailable (e.g. web without SQLite).
+  let v2: { spkId: number; spkHex: string; otpks: Array<{ id: number; pub: string }>; otpksSig: string } | null = null;
+  try {
+    const { ensurePrekeys } = await import('@/services/prekeys');
+    const pk = await ensurePrekeys();
+    const otpks = pk.otpks.map(o => ({ id: o.id, pub: bytesToHex(o.pub) }));
+    v2 = {
+      spkId: pk.spkId,
+      spkHex: bytesToHex(pk.spkPub),
+      otpks,
+      otpksSig: signOtpkBatch(edPriv, pk.spkId, otpks),
+    };
+  } catch (e: any) {
+    devLog.warn('setup', `prekey store unavailable, publishing v1 bundle: ${e?.message ?? String(e)}`);
+  }
+
+  const spkHex = v2?.spkHex ?? bytesToHex(spkPub);
   const bundleSig = signPrekeyBundle(edPriv, messagingDid, ikHex, spkHex, inboxToken);
 
   devLog.info('setup', 'publishing keybundle…');
   try {
     await publishKeybundle(agent, atprotoDid, {
       did: messagingDid, identityKey: ikHex, signedPrekey: spkHex, sig: bundleSig, inboxToken,
+      ...(v2 ? { spkId: v2.spkId, otpks: v2.otpks, otpksSig: v2.otpksSig } : {}),
     });
     devLog.ok('setup', 'keybundle published');
   } catch (e: any) {
