@@ -138,7 +138,10 @@ async function _reassemble(meta: FileMetaMessage, chunks: Map<number, Uint8Array
   // Save to disk
   const dir = FileSystem.documentDirectory + 'received/';
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-  const uri = dir + meta.name;
+  // meta.name is peer-supplied — strip path separators and leading dots so a
+  // malicious contact cannot traverse out of received/ and overwrite app files
+  const safeName = meta.name.replace(/[/\\]/g, '_').replace(/^\.+/, '') || 'file';
+  const uri = dir + safeName;
   await FileSystem.writeAsStringAsync(uri, bytesToBytes64(fileBytes), {
     encoding: FileSystem.EncodingType.Base64,
   });
