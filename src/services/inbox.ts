@@ -10,7 +10,7 @@
 //   Observer sees: someone wrote an encrypted blob to their own repo.
 //   The PDS operator cannot identify the intended recipient.
 
-import { COLLECTION_INBOX } from '@/config';
+import { COLLECTION_INBOX, COLLECTION_KEYBUNDLE } from '@/config';
 import { getAgent } from '@/services/agent';
 import { markInboxSeen, isInboxSeen } from '@/db';
 import type { LysnEnvelope } from '@/crypto/message';
@@ -21,17 +21,42 @@ import { pingRelay } from '@/services/notifications';
 
 const PUBLIC_API = 'https://public.api.bsky.app/xrpc';
 
+// Bug 2 fix: fetch the contact's current inboxToken from their keybundle.
+// The stored contact.sessionId may be stale if they re-logged-in.
+async function fetchCurrentInboxToken(contactDid: string): Promise<string | null> {
+  try {
+    const url = `${PUBLIC_API}/com.atproto.repo.getRecord` +
+      `?repo=${encodeURIComponent(contactDid)}&collection=${encodeURIComponent(COLLECTION_KEYBUNDLE)}&rkey=self`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const json = await res.json();
+    return (json.value?.inboxToken as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Write an envelope to your PDS's inbox collection addressed to a contact.
 // Called when peer is offline.
 export async function writeInboxRecord(
-  recipientSessionId: string,
+  recipientDid: string,
   envelope: LysnEnvelope,
 ): Promise<void> {
   const agent = getAgent();
   if (!agent) throw new Error('no ATProto agent');
+
+  // Bug 2 fix: always fetch the current inboxToken from the recipient's
+  // keybundle rather than using a potentially stale stored sessionId.
+  const currentToken = await fetchCurrentInboxToken(recipientDid);
+  const contacts = useContactsStore.getState().contacts;
+  const contact = contacts.find(c => c.did === recipientDid);
+  const recipientSessionId = currentToken ?? contact?.sessionId ?? recipientDid;
+
+  // Bug 5 fix: use .did getter (assertDid is a method, not a property)
+  const myDid = (agent as any).did ?? (agent as any).assertDid?.();
   const rkey = `${recipientSessionId}-${Date.now()}`;
   await (agent as any).api.com.atproto.repo.putRecord({
-    repo: (agent as any).assertDid ?? (agent as any).did,
+    repo: myDid,
     collection: COLLECTION_INBOX,
     rkey,
     record: {
@@ -46,29 +71,41 @@ export async function writeInboxRecord(
 
 // Poll a contact's PDS for inbox records addressed to us (our inboxToken prefix).
 // Processes new records through handleIncomingEnvelope and marks them seen.
+// Bug 4 fix: paginate with cursor so no records are silently missed.
 export async function pollContactInbox(contactDid: string): Promise<void> {
   const { identity, ikPriv, inboxToken } = useIdentityStore.getState();
   if (!identity || !ikPriv || !inboxToken) return;
 
   try {
-    const url = `${PUBLIC_API}/com.atproto.repo.listRecords` +
-      `?repo=${encodeURIComponent(contactDid)}&collection=${encodeURIComponent(COLLECTION_INBOX)}&limit=50`;
-    const res = await fetch(url);
-    if (!res.ok) return;
-    const json = await res.json();
-    const records: Array<{ uri: string; value: { payload?: string } }> = json.records ?? [];
+    let cursor: string | undefined;
+    do {
+      const params = new URLSearchParams({
+        repo: contactDid,
+        collection: COLLECTION_INBOX,
+        limit: '50',
+        ...(cursor ? { cursor } : {}),
+      });
+      const res = await fetch(`${PUBLIC_API}/com.atproto.repo.listRecords?${params}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      const records: Array<{ uri: string; value: { payload?: string } }> = json.records ?? [];
+      cursor = json.cursor as string | undefined;
 
-    for (const rec of records) {
-      const rkey = rec.uri.split('/').pop() ?? '';
-      if (!rkey.startsWith(inboxToken)) continue; // not addressed to us
-      if (await isInboxSeen(rkey)) continue;
+      for (const rec of records) {
+        const rkey = rec.uri.split('/').pop() ?? '';
+        if (!rkey.startsWith(inboxToken)) continue; // not addressed to us
+        if (await isInboxSeen(rkey)) continue;
 
-      try {
-        const envelope: LysnEnvelope = JSON.parse(rec.value.payload ?? '');
-        handleIncomingEnvelope(envelope, identity.did, identity.messagingDid, ikPriv);
-        await markInboxSeen(rkey, contactDid);
-      } catch { /* malformed or not for us — skip */ }
-    }
+        try {
+          const envelope: LysnEnvelope = JSON.parse(rec.value.payload ?? '');
+          handleIncomingEnvelope(envelope, identity.did, identity.messagingDid, ikPriv);
+          await markInboxSeen(rkey, contactDid);
+        } catch { /* malformed or not for us — skip */ }
+      }
+
+      // Stop paging if no more records or page was short (nothing left)
+      if (!cursor || records.length < 50) break;
+    } while (true);
   } catch { /* network error */ }
 }
 
@@ -83,7 +120,8 @@ export async function pollAllContactInboxes(): Promise<void> {
 export async function pruneMyInboxRecords(maxAgeMs = 7 * 24 * 60 * 60 * 1000): Promise<void> {
   const agent = getAgent();
   if (!agent) return;
-  const myDid = (agent as any).assertDid ?? (agent as any).did;
+  // Bug 5 fix: .assertDid is a method not a property; use .did getter
+  const myDid = (agent as any).did ?? (agent as any).assertDid?.();
   try {
     const res = await (agent as any).api.com.atproto.repo.listRecords({
       repo: myDid,

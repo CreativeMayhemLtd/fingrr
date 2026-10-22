@@ -5,6 +5,7 @@
 // incoming offers, and routes Lysn envelopes to handleIncomingEnvelope.
 
 import { useEffect, useRef } from 'react';
+import * as Notifications from 'expo-notifications';
 import { useIdentityStore } from '@/store/identity';
 import { useContactsStore } from '@/store/contacts';
 import { ATProtoSignaling } from '@/transport/signaling';
@@ -14,6 +15,8 @@ import { pollAllContactInboxes, pruneMyInboxRecords } from '@/services/inbox';
 import { discoverMyGroups } from '@/services/group';
 import { setActivePeer, setActiveSignaling } from '@/services/session';
 import { getDB } from '@/db';
+
+const POLL_INTERVAL_MS = 8_000; // poll inbox every 8 s while app is open
 
 export function usePeerConnection(): void {
   const identity = useIdentityStore(s => s.identity);
@@ -43,6 +46,16 @@ export function usePeerConnection(): void {
     discoverMyGroups();
     pruneMyInboxRecords();
 
+    // Bug 1 fix: continuous inbox poll while app is open
+    const pollTimer = setInterval(() => {
+      pollAllContactInboxes().catch(() => {});
+    }, POLL_INTERVAL_MS);
+
+    // Bug 1 fix: re-poll immediately on silent push notification
+    const pushSub = Notifications.addNotificationReceivedListener(() => {
+      pollAllContactInboxes().catch(() => {});
+    });
+
     // Handle incoming WebRTC signals
     const unsub = signaling.onMessage(async (msg) => {
       if (msg.type !== 'offer') return; // answer/ice handled by PeerConnection itself
@@ -63,6 +76,8 @@ export function usePeerConnection(): void {
 
     return () => {
       unsub();
+      clearInterval(pollTimer);
+      pushSub.remove();
       signaling.stopAll();
       signalingRef.current = null;
       setActiveSignaling(null);

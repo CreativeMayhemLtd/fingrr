@@ -33,9 +33,10 @@ export async function sendTextMessage(contact: Contact, body: string): Promise<v
   if (peer?.dataChannelOpen()) {
     peer.sendEnvelope(env);
   } else {
-    // Offline: post to recipient's inbox on our PDS — they poll on reconnect
+    // Offline: post to recipient's inbox on our PDS — they poll on reconnect.
+    // Pass contact.did so writeInboxRecord can fetch the current inboxToken.
     const { writeInboxRecord } = await import('@/services/inbox');
-    await writeInboxRecord(contact.sessionId, env);
+    await writeInboxRecord(contact.did, env);
   }
 
   const msgId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
