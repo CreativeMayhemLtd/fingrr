@@ -28,10 +28,10 @@ export default function Onboarding() {
     setLoading(true);
     devLog.info('onboarding', `web login: handle = ${h}`);
     try {
-      const { oauthClientPromise } = await import('@/auth/atproto-oauth');
+      const { oauthClientPromise, OAUTH_SCOPE } = await import('@/auth/atproto-oauth');
       const oauthClient = await oauthClientPromise;
       devLog.info('onboarding', 'calling signInRedirect…');
-      await oauthClient!.signInRedirect(h, { scope: 'atproto transition:generic' });
+      await oauthClient!.signInRedirect(h, { scope: OAUTH_SCOPE });
       // Browser navigates away — nothing below runs
     } catch (e: any) {
       const msg = e?.message ?? String(e);
