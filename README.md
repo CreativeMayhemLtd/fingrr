@@ -4,6 +4,8 @@
 
 fingrr lets Bluesky users exchange encrypted messages without trusting any server with their content. Identity is your existing Bluesky account. Keys are derived from a secret that never leaves your device. Signaling and offline delivery ride encrypted records on your own ATProto repo; live messages travel over direct WebRTC data channels.
 
+![How fingrr works: a message is sealed into anonymous ciphertext, crosses the ATProto network where observers see nothing, and is decrypted only by the recipient](docs/how-it-works.svg)
+
 > **Status: proof of concept. Not audited.** Messages to offline peers are delivered via encrypted ATProto inbox records (store-and-forward on your own PDS); live messages use WebRTC. Do not use fingrr for anything requiring production-grade security guarantees until an external audit exists. See [CLAIMS.md](CLAIMS.md) for every security claim, its implementation, and the test that proves it, and [THREAT_MODEL.md](THREAT_MODEL.md) for what each adversary can and cannot learn.
 
 ---
