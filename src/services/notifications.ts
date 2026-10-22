@@ -117,12 +117,17 @@ export function setupNotificationTapHandler(): () => void {
     const did = response.notification.request.content.data?.conversationDid as string | undefined;
     if (did) {
       import('expo-router').then(({ router }) => {
-        // could be group id or contact did — route handles both
-        if (did.startsWith('did:')) {
-          router.push(`/chat/${did}`);
-        } else {
-          router.push(`/group/${did}`);
-        }
+        const go = () => {
+          // could be group id or contact did — route handles both
+          if (did.startsWith('did:')) {
+            router.push(`/chat/${did}`);
+          } else {
+            router.push(`/group/${did}`);
+          }
+        };
+        // Cold start from a notification tap can fire before the root
+        // navigator mounts — retry once instead of crashing
+        try { go(); } catch { setTimeout(() => { try { go(); } catch { /* give up */ } }, 1000); }
       });
     }
   });

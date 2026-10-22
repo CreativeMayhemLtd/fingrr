@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
-import { router } from 'expo-router';
+import { router, Redirect } from 'expo-router';
 import { Agent } from '@atproto/api';
 import { setAgent } from '@/services/agent';
 import type { OAuthSession } from '@atproto/oauth-client-browser';
@@ -135,17 +135,11 @@ export default function Index() {
   const setIdentity = useIdentityStore((s) => s.setIdentity);
 
   useEffect(() => {
-    if (isInitialized) {
-      devLog.info('index', 'already initialised → /home');
-      router.replace('/home');
-      return;
-    }
-
-    if (Platform.OS !== 'web') {
-      devLog.info('index', 'native → /onboarding');
-      router.replace('/onboarding');
-      return;
-    }
+    // isInitialized and native-platform cases are handled by render-time
+    // <Redirect> below — calling router.replace from a mount effect races
+    // the root navigator mount and crashes on a cold native start
+    // ("Attempted to navigate before mounting the Root Layout component").
+    if (isInitialized || Platform.OS !== 'web') return;
 
     // Still redirecting localhost → 127.0.0.1; don't run OAuth logic yet
     if (window.location.hostname === 'localhost') {
@@ -233,6 +227,9 @@ export default function Index() {
 
     return () => { cancelled = true; };
   }, [isInitialized]);
+
+  if (isInitialized) return <Redirect href="/home" />;
+  if (Platform.OS !== 'web') return <Redirect href="/onboarding" />;
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a', gap: 16, padding: 24 }}>
