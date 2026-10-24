@@ -5,7 +5,10 @@
 // reconnects, fetching records whose rkey starts with their own inboxToken.
 //
 // METADATA:
-//   rkey: `${recipientSessionId}-${timestamp}` — pseudonym, not a DID.
+//   rkey: `${recipientSessionId}-${timestamp}-${rand4}` — pseudonym, not a
+//   DID. The random suffix prevents same-millisecond collisions (readers
+//   match on token prefix and must treat everything after it as opaque;
+//   Lysn.fm writes the same three-part shape).
 //   value.payload: hex-encoded Lysn envelope — only the recipient can decrypt.
 //   Observer sees: someone wrote an encrypted blob to their own repo.
 //   The PDS operator cannot identify the intended recipient.
@@ -14,7 +17,7 @@ import { COLLECTION_INBOX, COLLECTION_KEYBUNDLE } from '@/config';
 import { getAgent } from '@/services/agent';
 import { markInboxSeen, isInboxSeen } from '@/db';
 import { verifyPrekeyBundle, verifyOtpkBatch } from '@/crypto/message';
-import { hexToBytes } from '@noble/hashes/utils';
+import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
 import type { LysnEnvelope } from '@/crypto/message';
 import { handleIncomingEnvelope } from '@/services/messaging';
 import { useIdentityStore } from '@/store/identity';
@@ -102,7 +105,10 @@ export async function writeInboxRecord(
 
   // Bug 5 fix: use .did getter (assertDid is a method, not a property)
   const myDid = (agent as any).did ?? (agent as any).assertDid?.();
-  const rkey = `${recipientSessionId}-${Date.now()}`;
+  // Random suffix: two senders writing in the same millisecond must not
+  // produce the same rkey (the recipient dedupes by rkey). Readers match on
+  // inboxToken prefix only, so the suffix shape is free to vary.
+  const rkey = `${recipientSessionId}-${Date.now()}-${bytesToHex(randomBytes(2))}`;
   await (agent as any).api.com.atproto.repo.putRecord({
     repo: myDid,
     collection: COLLECTION_INBOX,

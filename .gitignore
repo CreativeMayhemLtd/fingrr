@@ -9,3 +9,7 @@ ios/
 test/
 play-store-key.json
 # google-services.json is tracked as a placeholder — replace with real file from Firebase
+
+# Generated native projects (local builds only; EAS builds from app.json)
+/android
+/ios

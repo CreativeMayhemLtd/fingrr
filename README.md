@@ -191,7 +191,7 @@ cd server && npm install && node index.js   # PORT, RELAY_SECRET env vars
 
 ## Lysn compatibility
 
-Envelope v1 (`fm.lysn.keybundle`, `LysnEnvelope v1`, domain-separated signatures) is wire-compatible with the [Lysn2 messaging protocol](https://lysn.fm). Envelope v2 (X3DH/Double Ratchet, `spkId`/`otpks` bundle fields) is a fingrr extension; fingrr falls back to v1 toward peers that don't publish v2 prekeys.
+Both envelope versions (`fm.lysn.keybundle`, `LysnEnvelope` v1 and v2 with X3DH/Double Ratchet, domain-separated signatures) are wire-compatible with [Lysn.fm](https://lysn.fm) messaging, which publishes the same `spkId`/`otpks` bundle fields and runs the same ratchet; both sides verify this against shared test vectors. fingrr falls back to v1 toward peers that don't publish v2 prekeys. The HKDF labels, signature domains, bundle signed sets, inbox record shape, and ratchet limits are shared constants — neither project changes one unilaterally.
 
 ---
 
