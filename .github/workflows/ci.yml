@@ -23,6 +23,8 @@ jobs:
         run: node --experimental-strip-types scripts/test-session.ts
       - name: ATProto flow integration tests (mock PDS)
         run: node scripts/test-atproto-flow.mjs
+      - name: SBOM license classifier tests
+        run: node scripts/test-sbom.mjs
       - name: TypeScript check
         run: npx tsc --noEmit
 

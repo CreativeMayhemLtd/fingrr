@@ -164,6 +164,7 @@ node scripts/test-crypto.mjs                                  # v1 envelope (9)
 node --experimental-strip-types scripts/test-ratchet.ts      # X3DH + DR (16)
 node --experimental-strip-types scripts/test-session.ts      # envelope v2 + signatures (14)
 node scripts/test-atproto-flow.mjs                           # mock-PDS flow (9)
+node scripts/test-sbom.mjs                                   # SBOM license classifier (20)
 BSKY_HANDLE=… BSKY_APP_PASSWORD=… node --experimental-strip-types scripts/test-live-atproto.ts  # live PDS, v2 (7)
 ```
 
@@ -186,6 +187,12 @@ cd server && npm install && node index.js   # PORT, RELAY_SECRET env vars
 | Local DB | `expo-sqlite` + SQLCipher |
 | Transport | `react-native-webrtc` |
 | Push relay | Node.js + Fastify + `expo-server-sdk` |
+
+---
+
+## SBOM
+
+A full CycloneDX 1.5 software bill of materials is committed at [`sbom.json`](sbom.json) (human-readable: [`sbom_summary.md`](sbom_summary.md), license audit: [`license_compatibility.md`](license_compatibility.md)). It covers the app's complete npm tree, the push relay's npm tree, and the native layer inside the APK — Hermes, the vendored libwebrtc, SQLCipher/SQLite — with versions extracted from the installed modules rather than hand-maintained. Regenerate with `node tools/generate_sbom.mjs`. CI regenerates it on every push and PR, comments the dependency diff on PRs, and **fails the build** on strong-copyleft/non-commercial licenses in shipped code or on any dependency whose license changes between versions.
 
 ---
 
