@@ -174,6 +174,14 @@ Push relay (optional, self-hostable):
 cd server && npm install && node index.js   # PORT, RELAY_SECRET env vars
 ```
 
+Decoupling from Bluesky-operated hosts (optional env vars, set at build time):
+
+| Variable | Default | What the host sees |
+|---|---|---|
+| `EXPO_PUBLIC_API_URL` | `https://public.api.bsky.app/xrpc` | Which IPs fetch which DIDs' `fm.lysn.*` records. Point at any AppView-style host serving unauthenticated `getRecord`/`listRecords` for any DID. |
+| `EXPO_PUBLIC_HANDLE_RESOLVER_URL` | `https://bsky.social` | Every handle you type, plus your IP. Any PDS resolves handles on other domains without login — self-hosters can use their own. |
+| `EXPO_PUBLIC_TURN_URL/_USERNAME/_CREDENTIAL` | unset (no TURN) | Both peers' IPs; relays DTLS traffic it cannot read. |
+
 ---
 
 ## Stack

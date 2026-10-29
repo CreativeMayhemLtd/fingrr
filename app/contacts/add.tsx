@@ -6,6 +6,7 @@ import { hexToBytes } from '@noble/hashes/utils';
 import { useContactsStore } from '@/store/contacts';
 import { useIdentityStore } from '@/store/identity';
 import { fetchKeybundle, resolveHandle } from '@/identity/atproto';
+import { HANDLE_RESOLVER_URL } from '@/config';
 import { verifyPrekeyBundle } from '@/crypto/message';
 
 export default function AddContact() {
@@ -19,7 +20,7 @@ export default function AddContact() {
     if (!h || !identity) return;
     setLoading(true);
     try {
-      const agent = new BskyAgent({ service: 'https://bsky.social' });
+      const agent = new BskyAgent({ service: HANDLE_RESOLVER_URL });
       const did = await resolveHandle(agent, h);
       const bundle = await fetchKeybundle(agent, did);
 

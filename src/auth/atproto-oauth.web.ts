@@ -1,4 +1,5 @@
 import { BrowserOAuthClient } from '@atproto/oauth-client-browser';
+import { HANDLE_RESOLVER_URL } from '@/config';
 
 // buildLoopbackClientId(window.location) returns e.g.:
 //   http://localhost?redirect_uri=http%3A%2F%2F127.0.0.1%3A8081%2F
@@ -35,5 +36,5 @@ const clientId = loopbackClientId();
 
 export const oauthClientPromise: Promise<BrowserOAuthClient> = BrowserOAuthClient.load({
   clientId,
-  handleResolver: 'https://bsky.social',
+  handleResolver: HANDLE_RESOLVER_URL,
 });
