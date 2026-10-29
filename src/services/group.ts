@@ -16,10 +16,8 @@ import { writeInboxRecord } from '@/services/inbox';
 import { useIdentityStore } from '@/store/identity';
 import { useGroupsStore } from '@/store/groups';
 import { getAgent } from '@/services/agent';
-import { COLLECTION_GROUP, COLLECTION_GROUPMEMBERSHIP } from '@/config';
+import { COLLECTION_GROUP, COLLECTION_GROUPMEMBERSHIP, PUBLIC_API } from '@/config';
 import type { Contact, Group, GroupMember } from '@/types';
-
-const PUBLIC_API = 'https://public.api.bsky.app/xrpc';
 
 // ── Create ────────────────────────────────────────────────────────────────────
 

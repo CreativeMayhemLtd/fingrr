@@ -27,7 +27,7 @@
 //   to the same identity root as messages.
 
 import { getAgent } from '@/services/agent';
-import { COLLECTION_SIGNAL } from '@/config';
+import { COLLECTION_SIGNAL, PUBLIC_API } from '@/config';
 import { sealContent, openContent, wrapKey, unwrapKey, generateContentKey } from '@/crypto/encryption';
 import { signSignalBody, verifySignalBody, type SignedSignalBody } from '@/crypto/message';
 import { useContactsStore } from '@/store/contacts';
@@ -38,8 +38,6 @@ import type { SignalingMessage } from '@/types';
 const SIGNAL_MAX_AGE_S = 300;
 
 type MessageHandler = (msg: SignalingMessage & { _rkey?: string }) => void;
-
-const PUBLIC_API = 'https://public.api.bsky.app/xrpc';
 
 export class ATProtoSignaling {
   private handlers = new Set<MessageHandler>();

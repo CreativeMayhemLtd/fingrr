@@ -13,7 +13,7 @@
 //   Observer sees: someone wrote an encrypted blob to their own repo.
 //   The PDS operator cannot identify the intended recipient.
 
-import { COLLECTION_INBOX, COLLECTION_KEYBUNDLE } from '@/config';
+import { COLLECTION_INBOX, COLLECTION_KEYBUNDLE, PUBLIC_API } from '@/config';
 import { getAgent } from '@/services/agent';
 import { markInboxSeen, isInboxSeen } from '@/db';
 import { verifyPrekeyBundle, verifyOtpkBatch } from '@/crypto/message';
@@ -23,8 +23,6 @@ import { handleIncomingEnvelope } from '@/services/messaging';
 import { useIdentityStore } from '@/store/identity';
 import { useContactsStore } from '@/store/contacts';
 import { pingRelay } from '@/services/notifications';
-
-const PUBLIC_API = 'https://public.api.bsky.app/xrpc';
 
 export interface CurrentKeys {
   inboxToken: string;
