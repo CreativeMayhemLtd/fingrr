@@ -16,13 +16,23 @@ export const ICE_SERVERS: RTCIceServer[] = TURN_URL
   ? [...STUN_SERVERS, { urls: TURN_URL, username: TURN_USERNAME, credential: TURN_CREDENTIAL }]
   : STUN_SERVERS;
 
-// Public record reads (other users' keybundle/inbox/signal/group records) go
-// to an AppView-style host serving unauthenticated com.atproto.repo.getRecord
-// and listRecords for any DID. Defaults to Bluesky's public AppView; a
-// deployment running its own fm.lysn.* indexer can point reads at it instead.
-// The host sees which IPs fetch which DIDs' records — choose accordingly.
+// Public record reads (other users' keybundle/inbox/signal/group records):
+// by DEFAULT each repo is read from its owner's own PDS, resolved from the
+// DID document (see src/identity/pds.ts) — no single operator sees the whole
+// contact read pattern. Setting EXPO_PUBLIC_API_URL forces ALL reads through
+// one AppView-style host serving unauthenticated getRecord/listRecords for
+// any DID (e.g. a self-hosted fm.lysn.* appview); that host then sees which
+// IPs fetch which DIDs' records. Unset, this value is only the FALLBACK for
+// DIDs whose PDS cannot be resolved.
+export const PUBLIC_API_IS_OVERRIDE = !!process.env.EXPO_PUBLIC_API_URL;
 export const PUBLIC_API =
   (process.env.EXPO_PUBLIC_API_URL || 'https://public.api.bsky.app/xrpc').replace(/\/+$/, '');
+
+// DID document lookups for did:plc (one per contact per cache lifetime).
+// plc.directory is Bluesky-operated; mirrors exist and self-hosters can point
+// this at one.
+export const PLC_DIRECTORY_URL =
+  (process.env.EXPO_PUBLIC_PLC_URL || 'https://plc.directory').replace(/\/+$/, '');
 
 // Handle resolution (com.atproto.identity.resolveHandle): every typed handle
 // and the caller's IP go to this host. Any PDS resolves handles on other

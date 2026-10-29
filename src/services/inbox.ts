@@ -13,7 +13,8 @@
 //   Observer sees: someone wrote an encrypted blob to their own repo.
 //   The PDS operator cannot identify the intended recipient.
 
-import { COLLECTION_INBOX, COLLECTION_KEYBUNDLE, PUBLIC_API } from '@/config';
+import { COLLECTION_INBOX, COLLECTION_KEYBUNDLE } from '@/config';
+import { readServiceFor } from '@/identity/pds';
 import { getAgent } from '@/services/agent';
 import { markInboxSeen, isInboxSeen } from '@/db';
 import { verifyPrekeyBundle, verifyOtpkBatch } from '@/crypto/message';
@@ -43,7 +44,7 @@ export interface CurrentKeys {
 // is rejected rather than silently used.
 export async function fetchCurrentKeys(contactDid: string): Promise<CurrentKeys | null> {
   try {
-    const url = `${PUBLIC_API}/com.atproto.repo.getRecord` +
+    const url = `${await readServiceFor(contactDid)}/com.atproto.repo.getRecord` +
       `?repo=${encodeURIComponent(contactDid)}&collection=${encodeURIComponent(COLLECTION_KEYBUNDLE)}&rkey=self`;
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -137,7 +138,7 @@ export async function pollContactInbox(contactDid: string): Promise<void> {
         limit: '50',
         ...(cursor ? { cursor } : {}),
       });
-      const res = await fetch(`${PUBLIC_API}/com.atproto.repo.listRecords?${params}`);
+      const res = await fetch(`${await readServiceFor(contactDid)}/com.atproto.repo.listRecords?${params}`);
       if (!res.ok) return;
       const json = await res.json();
       const records: Array<{ uri: string; value: { payload?: string } }> = json.records ?? [];

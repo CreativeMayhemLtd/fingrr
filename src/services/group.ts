@@ -16,7 +16,8 @@ import { writeInboxRecord } from '@/services/inbox';
 import { useIdentityStore } from '@/store/identity';
 import { useGroupsStore } from '@/store/groups';
 import { getAgent } from '@/services/agent';
-import { COLLECTION_GROUP, COLLECTION_GROUPMEMBERSHIP, PUBLIC_API } from '@/config';
+import { COLLECTION_GROUP, COLLECTION_GROUPMEMBERSHIP } from '@/config';
+import { readServiceFor } from '@/identity/pds';
 import type { Contact, Group, GroupMember } from '@/types';
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -102,7 +103,7 @@ export async function createGroup(name: string, contacts: Contact[]): Promise<Gr
 
 export async function fetchGroupRecord(adminDid: string, groupId: string): Promise<Group | null> {
   try {
-    const url = `${PUBLIC_API}/com.atproto.repo.getRecord` +
+    const url = `${await readServiceFor(adminDid)}/com.atproto.repo.getRecord` +
       `?repo=${encodeURIComponent(adminDid)}&collection=${encodeURIComponent(COLLECTION_GROUP)}&rkey=${encodeURIComponent(groupId)}`;
     const res = await fetch(url);
     if (!res.ok) return null;

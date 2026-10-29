@@ -27,7 +27,8 @@
 //   to the same identity root as messages.
 
 import { getAgent } from '@/services/agent';
-import { COLLECTION_SIGNAL, PUBLIC_API } from '@/config';
+import { COLLECTION_SIGNAL } from '@/config';
+import { readServiceFor } from '@/identity/pds';
 import { sealContent, openContent, wrapKey, unwrapKey, generateContentKey } from '@/crypto/encryption';
 import { signSignalBody, verifySignalBody, type SignedSignalBody } from '@/crypto/message';
 import { useContactsStore } from '@/store/contacts';
@@ -143,7 +144,7 @@ export class ATProtoSignaling {
   private async _poll(contactDid: string): Promise<void> {
     if (this.stopped) return;
     try {
-      const url = `${PUBLIC_API}/com.atproto.repo.listRecords` +
+      const url = `${await readServiceFor(contactDid)}/com.atproto.repo.listRecords` +
         `?repo=${encodeURIComponent(contactDid)}&collection=${encodeURIComponent(COLLECTION_SIGNAL)}&limit=20`;
       const res = await fetch(url);
       if (!res.ok) return;

@@ -27,6 +27,8 @@ jobs:
         run: node scripts/test-sbom.mjs
       - name: Config env-override tests
         run: node scripts/test-config.mjs
+      - name: Per-contact PDS resolution tests
+        run: node --experimental-strip-types scripts/test-pds-resolve.mjs
       - name: TypeScript check
         run: npx tsc --noEmit
 

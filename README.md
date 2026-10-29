@@ -99,6 +99,7 @@ Message history is stored in SQLite encrypted at rest with **SQLCipher**, keyed 
 | Record timing/sizes | Your PDS operator + anyone watching your repo |
 | Group membership (DIDs, handles) | **Anyone** — `fm.lysn.group` records are public (known gap) |
 | IP addresses | Your peer (direct); STUN operator; TURN operator if you configure one |
+| Your contact read pattern | Each contact's own PDS sees your IP poll that one contact (default); one AppView operator sees the whole pattern only if you set `EXPO_PUBLIC_API_URL`; the PLC directory sees one DID lookup per contact per ~6 h |
 | Push metadata | Expo + Google/Apple: device token, ping timing; our relay: inboxToken ↔ push token |
 
 ## Known limitations
@@ -166,6 +167,7 @@ node --experimental-strip-types scripts/test-session.ts      # envelope v2 + sig
 node scripts/test-atproto-flow.mjs                           # mock-PDS flow (9)
 node scripts/test-sbom.mjs                                   # SBOM license classifier (20)
 node scripts/test-config.mjs                                 # env-var config overrides (4)
+node --experimental-strip-types scripts/test-pds-resolve.mjs # per-contact PDS resolution (10)
 BSKY_HANDLE=… BSKY_APP_PASSWORD=… node --experimental-strip-types scripts/test-live-atproto.ts  # live PDS, v2 (7)
 ```
 
@@ -177,9 +179,12 @@ cd server && npm install && node index.js   # PORT, RELAY_SECRET env vars
 
 Decoupling from Bluesky-operated hosts (optional env vars, set at build time):
 
+By default, each contact's records are read **from that contact's own PDS** (resolved from their DID document and cached ~6 h) — no single operator sees your whole contact read pattern. Bluesky's public AppView is used only as a fallback when a DID's PDS cannot be resolved.
+
 | Variable | Default | What the host sees |
 |---|---|---|
-| `EXPO_PUBLIC_API_URL` | `https://public.api.bsky.app/xrpc` | Which IPs fetch which DIDs' `fm.lysn.*` records. Point at any AppView-style host serving unauthenticated `getRecord`/`listRecords` for any DID. |
+| `EXPO_PUBLIC_API_URL` | unset — per-contact PDS reads | **Override**: forces all `fm.lysn.*` reads through one AppView-style host serving unauthenticated `getRecord`/`listRecords` for any DID. That one operator then sees which IPs fetch which DIDs' records — a deliberate trade: one accountable operator you chose, instead of each peer's PDS seeing one read each. |
+| `EXPO_PUBLIC_PLC_URL` | `https://plc.directory` | One DID-document lookup per contact per cache lifetime. plc.directory is Bluesky-operated; mirrors exist. |
 | `EXPO_PUBLIC_HANDLE_RESOLVER_URL` | `https://bsky.social` | Every handle you type, plus your IP. Any PDS resolves handles on other domains without login — self-hosters can use their own. |
 | `EXPO_PUBLIC_TURN_URL/_USERNAME/_CREDENTIAL` | unset (no TURN) | Both peers' IPs; relays DTLS traffic it cannot read. |
 
