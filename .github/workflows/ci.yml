@@ -25,6 +25,8 @@ jobs:
         run: node scripts/test-atproto-flow.mjs
       - name: SBOM license classifier tests
         run: node scripts/test-sbom.mjs
+      - name: Config env-override tests
+        run: node scripts/test-config.mjs
       - name: TypeScript check
         run: npx tsc --noEmit
 

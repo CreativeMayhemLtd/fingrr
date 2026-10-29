@@ -22,13 +22,13 @@ export const ICE_SERVERS: RTCIceServer[] = TURN_URL
 // deployment running its own fm.lysn.* indexer can point reads at it instead.
 // The host sees which IPs fetch which DIDs' records — choose accordingly.
 export const PUBLIC_API =
-  (process.env.EXPO_PUBLIC_API_URL ?? 'https://public.api.bsky.app/xrpc').replace(/\/+$/, '');
+  (process.env.EXPO_PUBLIC_API_URL || 'https://public.api.bsky.app/xrpc').replace(/\/+$/, '');
 
 // Handle resolution (com.atproto.identity.resolveHandle): every typed handle
 // and the caller's IP go to this host. Any PDS resolves handles on other
 // domains without login, so self-hosters can point this at their own PDS.
 export const HANDLE_RESOLVER_URL =
-  (process.env.EXPO_PUBLIC_HANDLE_RESOLVER_URL ?? 'https://bsky.social').replace(/\/+$/, '');
+  (process.env.EXPO_PUBLIC_HANDLE_RESOLVER_URL || 'https://bsky.social').replace(/\/+$/, '');
 
 // ATProto collections
 export const COLLECTION_SIGNAL        = 'fm.lysn.signal';         // WebRTC signaling (short-lived)

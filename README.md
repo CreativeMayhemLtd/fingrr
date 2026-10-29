@@ -165,6 +165,7 @@ node --experimental-strip-types scripts/test-ratchet.ts      # X3DH + DR (16)
 node --experimental-strip-types scripts/test-session.ts      # envelope v2 + signatures (14)
 node scripts/test-atproto-flow.mjs                           # mock-PDS flow (9)
 node scripts/test-sbom.mjs                                   # SBOM license classifier (20)
+node scripts/test-config.mjs                                 # env-var config overrides (4)
 BSKY_HANDLE=… BSKY_APP_PASSWORD=… node --experimental-strip-types scripts/test-live-atproto.ts  # live PDS, v2 (7)
 ```
 
