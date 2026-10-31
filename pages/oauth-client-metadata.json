@@ -1,7 +1,7 @@
 {
   "client_id": "https://creativemayhemltd.github.io/fingrr/oauth-client-metadata.json",
   "client_name": "fingrr",
-  "client_uri": "https://github.com/CreativeMayhemLtd/fingrr",
+  "client_uri": "https://creativemayhemltd.github.io/fingrr/",
   "application_type": "native",
   "dpop_bound_access_tokens": true,
   "grant_types": ["authorization_code", "refresh_token"],

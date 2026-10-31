@@ -105,6 +105,11 @@ const metadata = JSON.parse(readFileSync(path.join(root, 'pages', 'oauth-client-
 
   check('native client declarations', metadata.application_type === 'native' && metadata.token_endpoint_auth_method === 'none' && metadata.dpop_bound_access_tokens === true);
 
+  // Live bsky.social enforced this beyond the schema (2026-10-31): the PAR
+  // was refused with invalid_client_metadata until client_uri shared the
+  // client_id origin.
+  check('client_uri has the client_id origin', !metadata.client_uri || new URL(metadata.client_uri).origin === clientIdUrl.origin);
+
   // Every fm.lysn.* collection the app writes must have a repo: grant —
   // a missing one fails at runtime with insufficient_scope on real devices.
   const config = readFileSync(path.join(root, 'src', 'config.ts'), 'utf8');
