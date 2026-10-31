@@ -8,6 +8,14 @@
 
 import { getRandomValues } from 'expo-crypto';
 
+// React Native's built-in URL/URLSearchParams are stubs — URL.protocol,
+// .pathname, .searchParams parsing and most of URLSearchParams throw
+// "not implemented" (react-native/Libraries/Blob/URL.js). The atproto OAuth
+// client builds and parses URLs throughout (PAR, callback params, metadata),
+// so install the full WHATWG implementation before any of that loads. On web
+// this import is a no-op (native URL is detected and kept).
+import 'react-native-url-polyfill/auto';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const g = globalThis as any;
 if (!g.crypto) g.crypto = {};

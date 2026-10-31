@@ -29,6 +29,8 @@ jobs:
         run: node scripts/test-config.mjs
       - name: Per-contact PDS resolution tests
         run: node --experimental-strip-types scripts/test-pds-resolve.mjs
+      - name: Native OAuth tests (DPoP key, stores, client metadata)
+        run: node --experimental-strip-types scripts/test-oauth-native.mjs
       - name: TypeScript check
         run: npx tsc --noEmit
 

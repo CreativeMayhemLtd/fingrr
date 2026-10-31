@@ -7,7 +7,7 @@
       "policy": "appVersion"
     },
     "orientation": "portrait",
-    "scheme": "fingrr",
+    "scheme": ["fingrr", "io.github.creativemayhemltd"],
     "platforms": [
       "ios",
       "android",

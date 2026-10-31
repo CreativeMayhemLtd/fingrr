@@ -4,10 +4,7 @@ import { router, Redirect } from 'expo-router';
 import { Agent } from '@atproto/api';
 import { setAgent } from '@/services/agent';
 import type { OAuthSession } from '@atproto/oauth-client-browser';
-import { bytesToHex, randomBytes } from '@noble/hashes/utils';
-import { getMasterKey, deriveEd25519Keypair, deriveX25519Keypair, didKeyFromEd25519 } from '@/crypto/keys';
-import { signPrekeyBundle, signOtpkBatch } from '@/crypto/message';
-import { publishKeybundle } from '@/identity/atproto';
+import { setupFromSession } from '@/identity/setup';
 import { useIdentityStore } from '@/store/identity';
 import { devLog } from '@/debug/log';
 
@@ -63,69 +60,6 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
       devLog.error('promise', msg);
     });
   });
-}
-
-async function setupFromSession(session: OAuthSession, agent: Agent) {
-  const atprotoDid = session.did;
-  devLog.info('setup', `atprotoDid = ${atprotoDid}`);
-
-  const masterKey = await getMasterKey();
-  devLog.info('setup', 'master key loaded');
-
-  const { privateKey: edPriv, publicKey: edPub } = deriveEd25519Keypair(masterKey, 0);
-  const messagingDid = didKeyFromEd25519(edPub);
-  devLog.info('setup', `messagingDid = ${messagingDid.slice(0, 30)}…`);
-
-  const { privateKey: ikPriv, publicKey: ikPub } = deriveX25519Keypair(masterKey, 'x25519-ik', 0);
-  const { privateKey: spkPriv, publicKey: spkPub } = deriveX25519Keypair(masterKey, 'x25519-spk', 0);
-
-  const ikHex = bytesToHex(ikPub);
-
-  // Fresh random inbox token every session — relay address is never derivable
-  // from any public identity data, so observers can't link sessions to DIDs.
-  const inboxToken = bytesToHex(randomBytes(16));
-  devLog.info('setup', `inboxToken = ${inboxToken.slice(0, 8)}…`);
-
-  // Envelope v2: random rotating SPK + one-time prekey batch from the
-  // encrypted DB. Falls back to the legacy derived SPK (v1-only bundle) if
-  // the prekey store is unavailable (e.g. web without SQLite).
-  let v2: { spkId: number; spkHex: string; otpks: Array<{ id: number; pub: string }>; otpksSig: string } | null = null;
-  try {
-    const { ensurePrekeys } = await import('@/services/prekeys');
-    const pk = await ensurePrekeys();
-    const otpks = pk.otpks.map(o => ({ id: o.id, pub: bytesToHex(o.pub) }));
-    v2 = {
-      spkId: pk.spkId,
-      spkHex: bytesToHex(pk.spkPub),
-      otpks,
-      otpksSig: signOtpkBatch(edPriv, pk.spkId, otpks),
-    };
-  } catch (e: any) {
-    devLog.warn('setup', `prekey store unavailable, publishing v1 bundle: ${e?.message ?? String(e)}`);
-  }
-
-  const spkHex = v2?.spkHex ?? bytesToHex(spkPub);
-  const bundleSig = signPrekeyBundle(edPriv, messagingDid, ikHex, spkHex, inboxToken);
-
-  devLog.info('setup', 'publishing keybundle…');
-  try {
-    await publishKeybundle(agent, atprotoDid, {
-      did: messagingDid, identityKey: ikHex, signedPrekey: spkHex, sig: bundleSig, inboxToken,
-      ...(v2 ? { spkId: v2.spkId, otpks: v2.otpks, otpksSig: v2.otpksSig } : {}),
-    });
-    devLog.ok('setup', 'keybundle published');
-  } catch (e: any) {
-    devLog.warn('setup', `keybundle publish failed (non-fatal): ${e?.message ?? String(e)}`);
-  }
-
-  const profile = await agent.getProfile({ actor: atprotoDid }).catch((e) => {
-    devLog.warn('setup', `getProfile failed: ${e.message}`);
-    return null;
-  });
-  const handle = profile?.data?.handle ?? atprotoDid;
-  const displayName = profile?.data?.displayName ?? null;
-
-  return { atprotoDid, handle, displayName, messagingDid, ikPub, spkPub, masterKey, edPriv, ikPriv, spkPriv, inboxToken };
 }
 
 export default function Index() {
@@ -206,7 +140,7 @@ export default function Index() {
         setStatus('Setting up keys…');
         const agent = new Agent(session);
         setAgent(agent);
-        const data = await setupFromSession(session, agent);
+        const data = await setupFromSession(session.did, agent);
 
         if (cancelled) return;
         setIdentity(

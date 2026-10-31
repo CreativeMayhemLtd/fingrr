@@ -1,0 +1,12 @@
+{
+  "client_id": "https://creativemayhemltd.github.io/fingrr/oauth-client-metadata.json",
+  "client_name": "fingrr",
+  "client_uri": "https://github.com/CreativeMayhemLtd/fingrr",
+  "application_type": "native",
+  "dpop_bound_access_tokens": true,
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "redirect_uris": ["io.github.creativemayhemltd:/oauth-callback"],
+  "scope": "atproto repo:fm.lysn.keybundle repo:fm.lysn.inbox repo:fm.lysn.signal repo:fm.lysn.group repo:fm.lysn.groupmembership",
+  "token_endpoint_auth_method": "none"
+}

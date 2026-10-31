@@ -1,0 +1,35 @@
+# Publishes pages/ to GitHub Pages. The only content is the atproto OAuth
+# client metadata document — its URL is the app's OAuth client_id, so it must
+# be served over https from a stable origin. Changing the metadata therefore
+# changes what every deployed app authenticates as: treat edits like releases.
+
+name: Pages (OAuth client metadata)
+
+on:
+  push:
+    branches: [main]
+    paths: ['pages/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages/
+      - id: deployment
+        uses: actions/deploy-pages@v4

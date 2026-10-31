@@ -21,6 +21,6 @@
 - **lightningcss-win32-arm64-msvc** 1.27.0 — MPL-2.0: Weak copyleft: MPL-2.0 — unmodified use is fine, document it
 - **lightningcss-win32-x64-msvc** 1.27.0 — MPL-2.0: Weak copyleft: MPL-2.0 — unmodified use is fine, document it
 
-## PASS (1542)
+## PASS (1544)
 
 All permissive-licensed.

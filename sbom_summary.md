@@ -1,9 +1,9 @@
 # fingrr Software Bill of Materials
 
-Generated: 2026-10-28T16:29:39.071Z
-Total components: 1557
+Generated: 2026-10-31T18:18:48.939Z
+Total components: 1559
 
-## App npm packages (1438)
+## App npm packages (1440)
 
 | Name | Version | License |
 |------|---------|---------|
@@ -626,6 +626,7 @@ Total components: 1557
 | expo-sqlite | 15.1.4 | MIT |
 | expo-status-bar | 2.0.1 | MIT |
 | expo-updates-interface | 1.0.0 | MIT |
+| expo-web-browser | 14.0.2 | MIT |
 | exponential-backoff | 3.1.3 | Apache-2.0 |
 | extract-zip _(dev)_ | 2.0.1 | BSD-2-Clause |
 | extsprintf _(dev)_ | 1.4.1 | MIT |
@@ -1126,6 +1127,7 @@ Total components: 1557
 | react-native-is-edge-to-edge | 1.3.1 | MIT |
 | react-native-safe-area-context | 4.12.0 | MIT |
 | react-native-screens | 4.4.0 | MIT |
+| react-native-url-polyfill | 4.0.0 | MIT |
 | react-native-web | 0.19.13 | MIT |
 | react-native-webrtc | 124.0.8 | MIT |
 | react-refresh | 0.14.2 | MIT |
@@ -1574,3 +1576,10 @@ Total components: 1557
 | react-android (RN runtime) | 0.76.9 | MIT |
 | SQLCipher Community Edition (vendored by expo-sqlite) | 4.6.0 | BSD-3-Clause |
 | SQLite (inside SQLCipher) | 3.45.3 | Public Domain |
+
+## Changes from Previous SBOM
+
+| Change | Component | Detail |
+|--------|-----------|--------|
+| ADDED | expo-web-browser | MIT |
+| ADDED | react-native-url-polyfill | MIT |

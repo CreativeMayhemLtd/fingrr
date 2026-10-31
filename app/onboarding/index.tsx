@@ -1,10 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollView } from 'react-native';
-import { BskyAgent } from '@atproto/api';
-import { bytesToHex, randomBytes } from '@noble/hashes/utils';
-import { getMasterKey, deriveEd25519Keypair, deriveX25519Keypair, didKeyFromEd25519 } from '@/crypto/keys';
-import { signPrekeyBundle, signOtpkBatch } from '@/crypto/message';
-import { publishKeybundle } from '@/identity/atproto';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollView, ActivityIndicator } from 'react-native';
+import { Agent } from '@atproto/api';
+import type { OAuthSession } from '@atproto/oauth-client';
+import { setupFromSession } from '@/identity/setup';
 import { useIdentityStore } from '@/store/identity';
 import { router } from 'expo-router';
 import { devLog } from '@/debug/log';
@@ -12,14 +10,46 @@ import { setAgent } from '@/services/agent';
 
 export default function Onboarding() {
   const [handle, setHandle] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(Platform.OS !== 'web');
   const [error, setError] = useState<string | null>(null);
   const setIdentity = useIdentityStore((s) => s.setIdentity);
 
   function normalise(raw: string) {
     return raw.trim().replace(/^@/, '');
   }
+
+  async function completeLogin(session: OAuthSession) {
+    const agent = new Agent(session);
+    setAgent(agent);
+    const data = await setupFromSession(session.did, agent);
+    setIdentity(
+      { did: data.atprotoDid, handle: data.handle, displayName: data.displayName, messagingDid: data.messagingDid, ikPub: data.ikPub, spkPub: data.spkPub },
+      data.masterKey, data.edPriv, data.ikPriv, data.spkPriv, data.inboxToken, data.displayName
+    );
+    devLog.ok('onboarding', `identity set for ${data.handle} → /home`);
+    router.replace('/home');
+  }
+
+  // Silent restore on cold start: the stored OAuth session (refresh token in
+  // the encrypted DB) signs the user back in without any interaction.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { restoreNativeSession } = await import('@/auth/atproto-oauth');
+        const session = await restoreNativeSession();
+        if (session && !cancelled) await completeLogin(session);
+      } catch (e: any) {
+        devLog.warn('onboarding', `silent restore failed: ${e?.message ?? String(e)}`);
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function loginWeb() {
     const h = normalise(handle);
@@ -41,56 +71,20 @@ export default function Onboarding() {
     }
   }
 
+  // Native login is atproto OAuth (fingrr issue #5): the handle resolves to
+  // the account's own PDS, consent happens in the system browser, and tokens
+  // come back DPoP-bound. The app never sees a password, and accounts on any
+  // PDS — not just bsky.social — can sign in.
   async function loginNative() {
     const h = normalise(handle);
-    if (!h || !password.trim()) { setError('Enter handle and app password'); return; }
+    if (!h) { setError('Enter your Bluesky handle'); return; }
     setError(null);
     setLoading(true);
-    devLog.info('onboarding', `native login: handle = ${h}`);
+    devLog.info('onboarding', `native OAuth login: handle = ${h}`);
     try {
-      const agent = new BskyAgent({ service: 'https://bsky.social' });
-      await agent.login({ identifier: h, password });
-      setAgent(agent as any);
-      const atprotoDid = agent.session!.did;
-      devLog.info('onboarding', `logged in as ${atprotoDid}`);
-
-      const masterKey = await getMasterKey();
-      const { privateKey: edPriv, publicKey: edPub } = deriveEd25519Keypair(masterKey, 0);
-      const messagingDid = didKeyFromEd25519(edPub);
-      const { privateKey: ikPriv, publicKey: ikPub } = deriveX25519Keypair(masterKey, 'x25519-ik', 0);
-      const { privateKey: spkPriv, publicKey: spkPub } = deriveX25519Keypair(masterKey, 'x25519-spk', 0);
-
-      const ikHex = bytesToHex(ikPub);
-      const inboxToken = bytesToHex(randomBytes(16));
-
-      // Envelope v2 prekeys (random rotating SPK + one-time prekey batch)
-      let v2: { spkId: number; spkHex: string; otpks: Array<{ id: number; pub: string }>; otpksSig: string } | null = null;
-      try {
-        const { ensurePrekeys } = await import('@/services/prekeys');
-        const pk = await ensurePrekeys();
-        const otpks = pk.otpks.map(o => ({ id: o.id, pub: bytesToHex(o.pub) }));
-        v2 = { spkId: pk.spkId, spkHex: bytesToHex(pk.spkPub), otpks, otpksSig: signOtpkBatch(edPriv, pk.spkId, otpks) };
-      } catch (e: any) {
-        devLog.warn('onboarding', `prekey store unavailable, v1 bundle: ${e?.message ?? String(e)}`);
-      }
-
-      const spkHex = v2?.spkHex ?? bytesToHex(spkPub);
-      const bundleSig = signPrekeyBundle(edPriv, messagingDid, ikHex, spkHex, inboxToken);
-
-      devLog.info('onboarding', 'publishing keybundle…');
-      await publishKeybundle(agent, atprotoDid, {
-        did: messagingDid, identityKey: ikHex, signedPrekey: spkHex, sig: bundleSig, inboxToken,
-        ...(v2 ? { spkId: v2.spkId, otpks: v2.otpks, otpksSig: v2.otpksSig } : {}),
-      });
-      devLog.ok('onboarding', 'keybundle published');
-
-      const profile = await agent.getProfile({ actor: atprotoDid }).catch(() => null);
-      const displayName = profile?.data?.displayName ?? null;
-      setIdentity(
-        { did: atprotoDid, handle: agent.session!.handle ?? h, displayName, messagingDid, ikPub, spkPub },
-        masterKey, edPriv, ikPriv, spkPriv, inboxToken, displayName
-      );
-      router.replace('/home');
+      const { signInNative } = await import('@/auth/atproto-oauth');
+      const session = await signInNative(h);
+      await completeLogin(session);
     } catch (e: any) {
       const msg = e?.message ?? String(e);
       devLog.error('onboarding', `login failed: ${msg}`);
@@ -98,6 +92,15 @@ export default function Onboarding() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (restoring) {
+    return (
+      <View style={[s.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator color="#2563eb" size="large" />
+        <Text style={s.sub}>Checking for existing session…</Text>
+      </View>
+    );
   }
 
   return (
@@ -117,18 +120,6 @@ export default function Onboarding() {
         editable={!loading}
       />
 
-      {Platform.OS !== 'web' && (
-        <TextInput
-          style={s.input}
-          placeholder="App password"
-          placeholderTextColor="#444"
-          value={password}
-          onChangeText={v => { setPassword(v); setError(null); }}
-          secureTextEntry
-          editable={!loading}
-        />
-      )}
-
       {error && (
         <View style={s.errorBox}>
           <Text style={s.errorText}>{error}</Text>
@@ -141,15 +132,13 @@ export default function Onboarding() {
         disabled={loading}
       >
         <Text style={s.btnText}>
-          {loading ? 'Redirecting to Bluesky…' : 'Continue with Bluesky'}
+          {loading ? 'Opening sign-in…' : 'Continue with Bluesky'}
         </Text>
       </TouchableOpacity>
 
-      {Platform.OS !== 'web' && (
-        <Text style={s.note}>
-          Generate an app password at bsky.app → Settings → App Passwords.
-        </Text>
-      )}
+      <Text style={s.note}>
+        You'll approve fingrr in your browser — no password is typed into this app.
+      </Text>
 
       <TouchableOpacity style={s.debugLink} onPress={() => router.push('/debug')}>
         <Text style={s.debugLinkText}>Debug / Test</Text>

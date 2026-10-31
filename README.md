@@ -14,7 +14,7 @@ fingrr lets Bluesky users exchange encrypted messages without trusting any serve
 
 ### Identity — your Bluesky DID as the address book
 
-fingrr authenticates via ATProto OAuth (web) or an app password (native). Your ATProto DID (`did:plc:…`) is your address — anyone on Bluesky can be a contact if they also run fingrr.
+fingrr authenticates via ATProto OAuth on every platform — no password is ever typed into the app. On native, the typed handle resolves to the account's own PDS and consent happens in the system browser (PAR + PKCE S256 + DPoP-bound tokens), so accounts on any PDS — not just bsky.social — can sign in. Your ATProto DID (`did:plc:…`) is your address — anyone on Bluesky can be a contact if they also run fingrr.
 
 A second "messaging identity" is derived from a device master key (SecureStore on native; wrapped under a non-extractable WebCrypto key in IndexedDB on web):
 
@@ -156,7 +156,9 @@ npx expo start          # native dev client
 npx expo start --web    # web (development only — see limitations)
 ```
 
-Web + ATProto OAuth: open **http://127.0.0.1:8081** (not `localhost` — loopback client ID requirement). OAuth scope: `atproto transition:generic`.
+Web + ATProto OAuth: open **http://127.0.0.1:8081** (not `localhost` — loopback client ID requirement). OAuth scope on web: `atproto transition:generic`.
+
+Native OAuth: the client metadata document lives at [`pages/oauth-client-metadata.json`](pages/oauth-client-metadata.json), served via GitHub Pages at the URL that is the `client_id`. Scope is granular — `repo:` grants for exactly the five `fm.lysn.*` collections the app writes, nothing else. Tokens are DPoP-bound (ES256 via `@noble/curves`; no WebCrypto on Hermes) and refresh tokens rest in the SQLCipher-encrypted database.
 
 Run the tests:
 
@@ -168,6 +170,7 @@ node scripts/test-atproto-flow.mjs                           # mock-PDS flow (9)
 node scripts/test-sbom.mjs                                   # SBOM license classifier (20)
 node scripts/test-config.mjs                                 # env-var config overrides (4)
 node --experimental-strip-types scripts/test-pds-resolve.mjs # per-contact PDS resolution (10)
+node --experimental-strip-types scripts/test-oauth-native.mjs # native OAuth: DPoP key, stores, metadata (17)
 BSKY_HANDLE=… BSKY_APP_PASSWORD=… node --experimental-strip-types scripts/test-live-atproto.ts  # live PDS, v2 (7)
 ```
 
