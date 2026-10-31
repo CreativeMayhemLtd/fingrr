@@ -183,7 +183,7 @@ By default, each contact's records are read **from that contact's own PDS** (res
 
 | Variable | Default | What the host sees |
 |---|---|---|
-| `EXPO_PUBLIC_API_URL` | unset — per-contact PDS reads | **Override**: forces all `fm.lysn.*` reads through one AppView-style host serving unauthenticated `getRecord`/`listRecords` for any DID. That one operator then sees which IPs fetch which DIDs' records — a deliberate trade: one accountable operator you chose, instead of each peer's PDS seeing one read each. |
+| `EXPO_PUBLIC_API_URL` | unset — per-contact PDS reads | **Override**: forces all `fm.lysn.*` reads through one AppView-style host serving unauthenticated `getRecord`/`listRecords` for any DID (e.g. a self-hosted `lysn-readview` — see [Lysn compatibility](#lysn-compatibility)). That one operator then sees which IPs fetch which DIDs' records — a deliberate trade: one accountable operator you chose, instead of each peer's PDS seeing one read each. |
 | `EXPO_PUBLIC_PLC_URL` | `https://plc.directory` | One DID-document lookup per contact per cache lifetime. plc.directory is Bluesky-operated; mirrors exist. |
 | `EXPO_PUBLIC_HANDLE_RESOLVER_URL` | `https://bsky.social` | Every handle you type, plus your IP. Any PDS resolves handles on other domains without login — self-hosters can use their own. |
 | `EXPO_PUBLIC_TURN_URL/_USERNAME/_CREDENTIAL` | unset (no TURN) | Both peers' IPs; relays DTLS traffic it cannot read. |
@@ -213,6 +213,15 @@ A full CycloneDX 1.5 software bill of materials is committed at [`sbom.json`](sb
 ## Lysn compatibility
 
 Both envelope versions (`fm.lysn.keybundle`, `LysnEnvelope` v1 and v2 with X3DH/Double Ratchet, domain-separated signatures) are wire-compatible with [Lysn.fm](https://lysn.fm) messaging, which publishes the same `spkId`/`otpks` bundle fields and runs the same ratchet; both sides verify this against shared test vectors. fingrr falls back to v1 toward peers that don't publish v2 prekeys. The HKDF labels, signature domains, bundle signed sets, inbox record shape, and ratchet limits are shared constants — neither project changes one unilaterally.
+
+**Self-hostable read service**: Lysn.fm ships `lysn-readview`, a small resolving proxy (one binary or container) that serves exactly the reads fingrr makes — `getRecord`/`listRecords` restricted to `fm.lysn.*` collections, plus `resolveHandle` — by forwarding each call to the repo owner's own PDS, unchanged. Point both knobs at one instance:
+
+```bash
+EXPO_PUBLIC_API_URL=https://<read-service>/xrpc
+EXPO_PUBLIC_HANDLE_RESOLVER_URL=https://<read-service>
+```
+
+It stores nothing, introduces no ordering contract (PDS `listRecords` semantics pass through), and deletes are visible on the next read. fingrr's four read shapes are held as fixtures in its test suite on the Lysn.fm side — a change to a read shape here is coordinated like the frozen constants, never made unilaterally.
 
 ---
 
