@@ -13,7 +13,7 @@ import { HANDLE_RESOLVER_URL } from '@/config';
 // The requested scope must also be DECLARED in the loopback client metadata,
 // which is derived from the client_id's query string — otherwise the auth
 // server rejects with invalid_scope. Keep in sync with signInRedirect().
-export const OAUTH_SCOPE = 'atproto transition:generic';
+export const OAUTH_SCOPE = process.env.EXPO_PUBLIC_WEB_OAUTH_SCOPE || 'atproto transition:generic';
 
 // Built explicitly, NOT via buildLoopbackClientId(window.location): that
 // helper embeds location.pathname, and if this module happens to load while
