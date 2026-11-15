@@ -6,6 +6,7 @@ import { hexToBytes } from '@noble/hashes/utils';
 import { useContactsStore } from '@/store/contacts';
 import { useIdentityStore } from '@/store/identity';
 import { fetchKeybundle, resolveHandle } from '@/identity/atproto';
+import { readServiceFor } from '@/identity/pds';
 import { HANDLE_RESOLVER_URL } from '@/config';
 import { verifyPrekeyBundle } from '@/crypto/message';
 
@@ -22,7 +23,8 @@ export default function AddContact() {
     try {
       const agent = new BskyAgent({ service: HANDLE_RESOLVER_URL });
       const did = await resolveHandle(agent, h);
-      const bundle = await fetchKeybundle(agent, did);
+      const readAgent = new BskyAgent({ service: (await readServiceFor(did)).replace(/\/xrpc$/, '') });
+      const bundle = await fetchKeybundle(readAgent, did);
 
       if (!bundle) {
         Alert.alert('Not found', "This account hasn't set up fingrr yet.");
